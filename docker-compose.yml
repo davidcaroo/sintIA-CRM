@@ -1,0 +1,88 @@
+services:
+  # Base de Datos PostgreSQL
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sintia_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Debe definirse POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-sintia_db}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+
+  # Proceso Web: Panel administrativo, APIs REST, SSE, OAuth y Chat Web
+  web:
+    image: ${DOCKER_IMAGE:?Debe definirse DOCKER_IMAGE}
+    command: web
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      APP_URL: https://${SUBDOMAIN:?Debe definirse SUBDOMAIN}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sintia_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sintia_db}?schema=public
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Debe definirse ENCRYPTION_KEY}
+      SESSION_SECRET: ${SESSION_SECRET:?Debe definirse SESSION_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@sintia.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123456}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-anthropic/claude-haiku-5.5}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      WEBHOOK_URL: ${WEBHOOK_URL}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      SEED_DEMO: ${SEED_DEMO:-false}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${PROJECT_NAME:?Debe definirse PROJECT_NAME}.rule=Host(`${SUBDOMAIN:?Debe definirse SUBDOMAIN}`)"
+      - "traefik.http.routers.${PROJECT_NAME}.entrypoints=websecure"
+      - "traefik.http.routers.${PROJECT_NAME}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${PROJECT_NAME}.loadbalancer.server.port=3000"
+    networks:
+      - default
+      - traefik-proxy
+
+  # Proceso Worker: Baileys WhatsApp client de larga duración y tareas programadas
+  worker:
+    image: ${DOCKER_IMAGE:?Debe definirse DOCKER_IMAGE}
+    command: worker
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sintia_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sintia_db}?schema=public
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Debe definirse ENCRYPTION_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-anthropic/claude-haiku-5.5}
+      WHATSAPP_SESSION_DIR: /app/whatsapp-session
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      APP_URL: https://${SUBDOMAIN:?Debe definirse SUBDOMAIN}
+    volumes:
+      - whatsapp_data:/app/whatsapp-session
+    networks:
+      - default
+
+volumes:
+  db_data:
+  whatsapp_data:
+
+networks:
+  default:
+  traefik-proxy:
+    external: true

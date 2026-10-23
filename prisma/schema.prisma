@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         String    @default("admin") // admin, member
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model BusinessInfo {
+  id            String   @id @default("default")
+  name          String   @default("Clínica Dental Lumen")
+  activity      String   @default("Clínica odontológica integral")
+  address       String   @default("Calle Gran Vía 32, Madrid")
+  phone         String   @default("+34 912 345 678")
+  website       String   @default("https://clinicalumen.es")
+  agencyName    String   @default("Agencia IA")
+  agencyLogoUrl String?
+  timezone      String   @default("Europe/Madrid")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AssistantConfig {
+  id                 String   @id @default("default")
+  isActive           Boolean  @default(true)
+  name               String   @default("Sintia")
+  avatarUrl          String?
+  tone               String   @default("cercano") // cercano, profesional, directo
+  welcomeMessage     String   @default("¡Hola! Soy Sintia, asistente de Clínica Dental Lumen. ¿En qué puedo ayudarte hoy?")
+  customInstructions String?  @db.Text
+  neverDoRules       String?  @db.Text
+  businessHours      Json?
+  afterHoursBehavior String   @default("take_message") // appointment, take_message
+  
+  handoffOnComplaint Boolean  @default(true)
+  handoffOnUrgency   Boolean  @default(true)
+  handoffOnRequest   Boolean  @default(true)
+  handoffOnUnknown   Boolean  @default(true)
+  handoffCustomRule  String?  @db.Text
+  
+  model              String   @default("anthropic/claude-haiku-5.5")
+  fallbackModel      String   @default("anthropic/claude-haiku-5.5")
+  
+  updatedAt          DateTime @updatedAt
+}
+
+model Service {
+  id                String   @id @default(cuid())
+  name              String
+  description       String   @db.Text
+  durationMinutes   Int      @default(30)
+  price             Decimal? @db.Decimal(10, 2)
+  isFromPrice       Boolean  @default(false)
+  requiresValuation Boolean  @default(false)
+  stripeDeposit     Decimal? @db.Decimal(10, 2)
+  order             Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Faq {
+  id        String   @id @default(cuid())
+  question  String
+  answer    String   @db.Text
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model KnowledgeNote {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  updatedAt DateTime @updatedAt
+}
+
+model Integration {
+  id                   String   @id
+  name                 String
+  category             String
+  isConnected          Boolean  @default(false)
+  status               String   @default("disconnected") // disconnected, connected, error
+  statusMessage        String?
+  encryptedCredentials String?  @db.Text
+  config               Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model ChannelState {
+  id              String   @id // whatsapp, webchat
+  isActive        Boolean  @default(true)
+  status          String   @default("disconnected") // disconnected, waiting_qr, connected
+  qrCode          String?  @db.Text
+  connectedNumber String?
+  connectedName   String?
+  widgetColor     String   @default("#0f172a")
+  welcomeText     String   @default("¡Hola! ¿Tienes dudas o quieres pedir cita? Escríbenos.")
+  updatedAt       DateTime @updatedAt
+}
+
+model Contact {
+  id               String         @id @default(cuid())
+  name             String?
+  phone            String?        @unique
+  whatsappLid      String?
+  email            String?
+  channel          String         @default("whatsapp")
+  interest         String?
+  askedAppointment Boolean        @default(false)
+  notes            String?        @db.Text
+  conversations    Conversation[]
+  appointments     Appointment[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
+model Conversation {
+  id            String    @id @default(cuid())
+  contactId     String
+  contact       Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  channel       String    // whatsapp, web
+  status        String    @default("bot") // bot, human_handoff, closed
+  handoffReason String?
+  lastMessageAt DateTime  @default(now())
+  messages      Message[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         String       // client, assistant, human
+  text           String       @db.Text
+  toolsUsed      Json?
+  channelMsgId   String?
+  createdAt      DateTime     @default(now())
+}
+
+model Appointment {
+  id              String    @id @default(cuid())
+  contactId       String
+  contact         Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  serviceName     String
+  startTime       DateTime
+  endTime         DateTime
+  googleEventId   String?
+  status          String    @default("scheduled") // scheduled, completed, cancelled
+  reminderSent    Boolean   @default(false)
+  depositPaid     Boolean   @default(false)
+  stripePaymentId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model ActivityLog {
+  id            String   @id @default(cuid())
+  action        String
+  integrationId String?
+  channel       String?
+  details       String   @db.Text
+  status        String   // success, error, warning
+  error         String?  @db.Text
+  metadata      Json?
+  createdAt     DateTime @default(now())
+}
