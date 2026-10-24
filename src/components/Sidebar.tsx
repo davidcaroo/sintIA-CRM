@@ -28,12 +28,12 @@ interface SidebarProps {
 
 const navItems = [
   { href: "/", label: "Resumen", icon: LayoutDashboard },
+  { href: "/conversaciones", label: "Conversaciones", icon: MessageSquare },
   { href: "/comportamiento", label: "Comportamiento", icon: Bot },
   { href: "/conocimiento", label: "Conocimiento", icon: BookOpen },
   { href: "/integraciones", label: "Integraciones", icon: Boxes },
   { href: "/canales", label: "Canales", icon: Radio },
   { href: "/probar", label: "Probar", icon: PlayCircle },
-  { href: "/conversaciones", label: "Conversaciones", icon: MessageSquare },
   { href: "/actividad", label: "Actividad", icon: Activity },
   { href: "/ajustes", label: "Ajustes", icon: Settings },
 ];
