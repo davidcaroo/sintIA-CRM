@@ -236,17 +236,8 @@ export default function ProbarPage() {
 
   return (
     <div className="space-y-6 pb-12 transition-colors max-w-7xl mx-auto">
-      {/* Encabezado y Selector de Pestañas */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-4">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <span>Zona de Pruebas & Calidad</span>
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Simula conversaciones en vivo o audita la calidad objetiva de tu agente con el Juez de IA de 0 a 100.
-          </p>
-        </div>
-
+      {/* Barra de Pestañas */}
+      <div className="flex items-center justify-end gap-4 pb-3 border-b border-slate-200/80 dark:border-slate-800">
         {/* Pestañas Principales */}
         <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700/80 self-start sm:self-auto">
           <button

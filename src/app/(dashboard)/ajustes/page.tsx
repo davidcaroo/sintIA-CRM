@@ -259,14 +259,8 @@ export default function AjustesPage() {
 
   return (
     <div className="space-y-8 pb-16 transition-colors">
-      {/* Encabezado */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Ajustes del Sistema</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Motor de Inteligencia Artificial, calculadora de costes, marca y usuarios.
-          </p>
-        </div>
+      {/* Barra de Acciones */}
+      <div className="flex items-center justify-end pb-3 border-b border-slate-200/80 dark:border-slate-800">
         <button
           onClick={handleSaveGeneral}
           disabled={saving}

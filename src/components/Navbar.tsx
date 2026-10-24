@@ -28,15 +28,10 @@ export function Navbar({ businessName = "Clínica Dental Lumen" }: { businessNam
         {/* Título de la sección / Breadcrumb */}
         <div className="flex items-center gap-3">
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-none">
-                {current.title}
-              </h1>
-              <span className="hidden sm:inline-block text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
-                {businessName}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 hidden md:block mt-0.5">
+            <h1 className="text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-none">
+              {current.title}
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block mt-1">
               {current.subtitle}
             </p>
           </div>

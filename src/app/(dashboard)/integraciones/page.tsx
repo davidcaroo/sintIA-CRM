@@ -242,14 +242,8 @@ export default function IntegracionesPage() {
 
   return (
     <div className="space-y-8 pb-16 transition-colors">
-      {/* Encabezado */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Catálogo de Integraciones</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Conecta las aplicaciones del negocio. Las herramientas del asistente se activan según las integraciones conectadas.
-          </p>
-        </div>
+      {/* Barra de Acciones */}
+      <div className="flex items-center justify-end pb-3 border-b border-slate-200/80 dark:border-slate-800">
         <button
           onClick={() => setShowGoogleGuide(!showGoogleGuide)}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 shadow-xs transition"

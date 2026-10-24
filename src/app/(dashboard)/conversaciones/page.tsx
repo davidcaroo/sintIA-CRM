@@ -274,34 +274,9 @@ export default function ConversacionesPage() {
   const countHandoff = conversations.filter((c) => c.status === "human_handoff").length;
 
   return (
-    <div className="space-y-4 pb-10 transition-colors max-w-7xl mx-auto">
-      {/* Barra de Título Minimalista estilo Vocero */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/70 dark:border-slate-800/80">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-              Bandeja de Conversaciones
-            </h1>
-            <span
-              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
-                sseConnected
-                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20"
-                  : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
-              }`}
-              title={sseConnected ? "Conexión SSE en vivo activa" : "Reconectando canal en vivo..."}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${sseConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-              {sseConnected ? "En vivo (SSE)" : "Conectando..."}
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Mensajería multicanal en tiempo real con supervisión de herramientas y traspaso humano.
-          </p>
-        </div>
-      </div>
-
+    <div className="transition-colors max-w-7xl mx-auto pb-4">
       {/* Contenedor Principal de Dos Columnas */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden h-[760px]">
+      <div className="grid grid-cols-1 lg:grid-cols-12 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden h-[calc(100vh-7.5rem)] min-h-[580px]">
         {/* COLUMNA IZQUIERDA: LISTA Y FILTROS ESTILO VOCERO (5 cols) */}
         <div className="lg:col-span-5 border-r border-slate-200/80 dark:border-slate-800 flex flex-col h-full bg-slate-50/50 dark:bg-slate-950/40">
           {/* Buscador */}

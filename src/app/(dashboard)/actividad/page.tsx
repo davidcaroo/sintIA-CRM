@@ -73,23 +73,6 @@ export default function ActividadPage() {
 
   return (
     <div className="space-y-6 pb-16 transition-colors">
-      {/* Encabezado */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Registro de Actividad</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Auditoría en tiempo real de cada llamada a herramientas, integraciones y acciones del asistente.
-          </p>
-        </div>
-        <button
-          onClick={loadLogs}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs transition"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Actualizar</span>
-        </button>
-      </div>
-
       {/* Filtros */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs flex flex-col sm:flex-row items-center gap-3 text-xs transition-colors">
         <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-semibold">
@@ -124,9 +107,16 @@ export default function ActividadPage() {
           </select>
         </div>
 
-        <span className="text-[11px] text-slate-400 dark:text-slate-500">
+        <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline">
           Mostrando últimos {logs.length} eventos
         </span>
+        <button
+          onClick={loadLogs}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-xs transition shrink-0 ml-auto"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>Actualizar</span>
+        </button>
       </div>
 
       {/* Lista de Registros */}
