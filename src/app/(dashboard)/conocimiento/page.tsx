@@ -78,6 +78,8 @@ export default function ConocimientoPage() {
   const [selectedServices, setSelectedServices] = useState<Record<number, boolean>>({});
   const [selectedFaqs, setSelectedFaqs] = useState<Record<number, boolean>>({});
   const [saveBusinessFromImport, setSaveBusinessFromImport] = useState(true);
+  const [saveContactFromImport, setSaveContactFromImport] = useState(true);
+  const [applyingImport, setApplyingImport] = useState(false);
 
   const loadData = () => {
     fetch("/api/knowledge")
@@ -249,53 +251,35 @@ export default function ConocimientoPage() {
   const handleApplyImport = async () => {
     if (!importResult?.proposal) return;
     const { proposal } = importResult;
-
-    if (saveBusinessFromImport && proposal.business) {
-      await fetch("/api/knowledge", {
-        method: "PUT",
+    setApplyingImport(true);
+    try {
+      const res = await fetch("/api/knowledge/import-web/apply", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          business: {
-            ...business,
-            name: proposal.business.name || business.name,
-            activity: proposal.business.activity || business.activity,
-            address: proposal.business.address || business.address,
-            phone: proposal.business.phone || business.phone,
-            website: proposal.business.website || business.website,
-          },
+          website: proposal.business?.website,
+          business: saveBusinessFromImport ? proposal.business : null,
+          services: (proposal.services || []).filter((_: any, i: number) => selectedServices[i]),
+          faqs: (proposal.faqs || []).filter((_: any, i: number) => selectedFaqs[i]),
+          contact: proposal.contact,
+          knowledge: saveContactFromImport ? proposal.knowledge : "",
+          includeContact: saveContactFromImport,
         }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "No se pudo guardar.");
+      toast.success(
+        "Conocimiento importado",
+        `${data.servicesCreated} servicios nuevos, ${data.servicesUpdated} actualizados · ${data.faqsCreated} FAQs nuevas, ${data.faqsUpdated} actualizadas.`
+      );
+      setShowImportModal(false);
+      setImportResult(null);
+      loadData();
+    } catch (err: any) {
+      toast.error("Error al importar", err.message);
+    } finally {
+      setApplyingImport(false);
     }
-
-    if (proposal.services) {
-      for (let i = 0; i < proposal.services.length; i++) {
-        if (selectedServices[i]) {
-          const s = proposal.services[i];
-          await fetch("/api/knowledge/services", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(s),
-          });
-        }
-      }
-    }
-
-    if (proposal.faqs) {
-      for (let i = 0; i < proposal.faqs.length; i++) {
-        if (selectedFaqs[i]) {
-          const f = proposal.faqs[i];
-          await fetch("/api/knowledge/faqs", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(f),
-          });
-        }
-      }
-    }
-
-    setShowImportModal(false);
-    setImportResult(null);
-    loadData();
   };
 
   if (loading) {
@@ -791,7 +775,7 @@ export default function ConocimientoPage() {
                   <span>Importar Conocimiento desde una Web</span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Descarga la web, rastrea subpáginas de servicios y genera propuestas con IA.
+                  Rastrea la web y sus páginas clave (servicios, precios, contacto, FAQ) y extrae solo lo que está escrito.
                 </p>
               </div>
               <button
@@ -837,16 +821,41 @@ export default function ConocimientoPage() {
 
               {importResult?.proposal && (
                 <div className="space-y-5 text-xs">
-                  <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+                  <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 space-y-1">
                     <div>
-                      <strong>¡Análisis completado!</strong> Se escanearon{" "}
-                      {importResult.scrapedPagesCount} página(s). Selecciona los datos que deseas guardar:
+                      <strong>¡Análisis completado!</strong> Se escanearon {importResult.scrapedPagesCount} página(s). Selecciona los datos que deseas guardar:
                     </div>
+                    {importResult.pages?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-1">
+                        {importResult.pages.map((pg: any) => (
+                          <a
+                            key={pg.url}
+                            href={pg.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-1.5 py-0.5 rounded bg-white/70 dark:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 text-[10px] hover:underline truncate max-w-[200px]"
+                            title={pg.url}
+                          >
+                            {pg.title || new URL(pg.url).pathname}
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
+
+                  {importResult.warnings?.map((w: string) => (
+                    <div
+                      key={w}
+                      className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 flex items-start gap-2"
+                    >
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{w}</span>
+                    </div>
+                  ))}
 
                   {/* Datos del Negocio detectados */}
                   {importResult.proposal.business && (
-                    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850 space-y-2">
+                    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-2">
                       <label className="flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100 cursor-pointer">
                         <input
                           type="checkbox"
@@ -857,13 +866,53 @@ export default function ConocimientoPage() {
                         <span>Actualizar datos del negocio</span>
                       </label>
                       <div className="text-slate-600 dark:text-slate-400 pl-6 space-y-0.5">
-                        <div><strong>Nombre:</strong> {importResult.proposal.business.name}</div>
-                        <div><strong>Actividad:</strong> {importResult.proposal.business.activity}</div>
-                        <div><strong>Teléfono:</strong> {importResult.proposal.business.phone}</div>
-                        <div><strong>Dirección:</strong> {importResult.proposal.business.address}</div>
+                        <div><strong>Nombre:</strong> {importResult.proposal.business.name || "—"}</div>
+                        <div><strong>Actividad:</strong> {importResult.proposal.business.activity || "—"}</div>
+                        <div><strong>Teléfono:</strong> {importResult.proposal.business.phone || "—"}</div>
+                        <div><strong>Dirección:</strong> {importResult.proposal.business.address || "—"}</div>
+                        <div><strong>Web:</strong> {importResult.proposal.business.website}</div>
                       </div>
                     </div>
                   )}
+
+                  {/* Contacto e información general */}
+                  {(() => {
+                    const ct = importResult.proposal.contact || {};
+                    const rows: [string, string][] = [
+                      ["Teléfonos", (ct.phones || []).join(", ")],
+                      ["WhatsApp", (ct.whatsapp || []).join(", ")],
+                      ["Correos", (ct.emails || []).join(", ")],
+                      ["Horario", ct.hours || ""],
+                      ...Object.entries(ct.socials || {}).map(([k, v]) => [k[0].toUpperCase() + k.slice(1), String(v)] as [string, string]),
+                    ].filter(([, v]) => v) as [string, string][];
+                    const knowledge = importResult.proposal.knowledge || "";
+                    if (!rows.length && !knowledge) return null;
+                    return (
+                      <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-2">
+                        <label className="flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={saveContactFromImport}
+                            onChange={(e) => setSaveContactFromImport(e.target.checked)}
+                            className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                          />
+                          <span>Guardar contacto e información general en el conocimiento adicional</span>
+                        </label>
+                        <div className="text-slate-600 dark:text-slate-400 pl-6 space-y-0.5">
+                          {rows.map(([k, v]) => (
+                            <div key={k} className="break-all">
+                              <strong>{k}:</strong> {v}
+                            </div>
+                          ))}
+                          {knowledge && (
+                            <pre className="mt-2 p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] whitespace-pre-wrap font-sans max-h-40 overflow-y-auto">
+                              {knowledge}
+                            </pre>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Servicios detectados */}
                   {importResult.proposal.services?.length > 0 && (
@@ -871,11 +920,13 @@ export default function ConocimientoPage() {
                       <div className="font-bold text-slate-900 dark:text-slate-100">
                         Servicios encontrados ({importResult.proposal.services.length}):
                       </div>
-                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                         {importResult.proposal.services.map((s: any, idx: number) => (
                           <label
                             key={idx}
-                            className="flex items-start gap-2.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 cursor-pointer"
+                            className={`flex items-start gap-2.5 p-2.5 rounded-lg border bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 cursor-pointer ${
+                              s.priceUnverified ? "border-amber-300 dark:border-amber-700" : "border-slate-200 dark:border-slate-800"
+                            }`}
                           >
                             <input
                               type="checkbox"
@@ -885,11 +936,31 @@ export default function ConocimientoPage() {
                               }
                               className="mt-0.5 rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
                             />
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                               <div className="font-semibold text-slate-900 dark:text-slate-100">{s.name}</div>
-                              <div className="text-slate-500 dark:text-slate-400 text-[11px]">{s.description}</div>
-                              <div className="text-slate-700 dark:text-slate-300 font-medium mt-0.5">
-                                {s.durationMinutes} min • {s.price ? `$ ${s.price.toLocaleString("es-CO")} COP` : "Consultar"}
+                              {s.description && <div className="text-slate-500 dark:text-slate-400 text-[11px]">{s.description}</div>}
+                              <div className="text-slate-700 dark:text-slate-300 font-medium mt-0.5 flex flex-wrap items-center gap-x-1.5">
+                                <span>{s.durationMinutes ? `${s.durationMinutes} min` : "Duración no indicada"}</span>
+                                <span>•</span>
+                                <span className={s.priceUnverified ? "text-amber-700 dark:text-amber-400" : ""}>
+                                  {s.price !== null && s.price !== undefined
+                                    ? `${s.isFromPrice ? "Desde " : ""}$ ${Number(s.price).toLocaleString("es-CO")} COP`
+                                    : s.requiresValuation
+                                    ? "Requiere valoración"
+                                    : "Precio no publicado"}
+                                  {s.priceUnverified && " (verificar)"}
+                                </span>
+                                {s.sourceUrl && (
+                                  <a
+                                    href={s.sourceUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-indigo-600 dark:text-indigo-400 hover:underline font-normal"
+                                  >
+                                    ver fuente
+                                  </a>
+                                )}
                               </div>
                             </div>
                           </label>
@@ -904,11 +975,11 @@ export default function ConocimientoPage() {
                       <div className="font-bold text-slate-900 dark:text-slate-100">
                         Preguntas Frecuentes detectadas ({importResult.proposal.faqs.length}):
                       </div>
-                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                         {importResult.proposal.faqs.map((f: any, idx: number) => (
                           <label
                             key={idx}
-                            className="flex items-start gap-2.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 cursor-pointer"
+                            className="flex items-start gap-2.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 cursor-pointer"
                           >
                             <input
                               type="checkbox"
@@ -934,14 +1005,16 @@ export default function ConocimientoPage() {
             {importResult?.proposal && (
               <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 rounded-b-2xl">
                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                  Se guardarán los elementos seleccionados en la base de datos.
+                  Los servicios y preguntas con el mismo nombre se actualizan, no se duplican.
                 </span>
                 <button
                   type="button"
                   onClick={handleApplyImport}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm"
+                  disabled={applyingImport}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 shadow-sm flex items-center gap-2"
                 >
-                  Guardar Selección en Sintia
+                  {applyingImport && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Guardar Selección en Sintia</span>
                 </button>
               </div>
             )}

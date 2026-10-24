@@ -1,202 +1,197 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { generateJson, hasLlm } from "@/lib/ai/llm";
+import { extractContacts, fetchPage, htmlToText, pageTitle, rankInternalLinks, type ContactInfo } from "@/lib/knowledge/web-extract";
 
-// Limpia etiquetas HTML y extrae texto plano
-function cleanHtml(html: string): string {
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
-    .replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, "")
-    .replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+export const dynamic = "force-dynamic";
+export const maxDuration = 120;
+
+const MAX_PAGES = 9; // portada + 8 subpáginas
+const PAGE_CHARS = 12000;
+const TOTAL_CHARS = 80000;
+
+interface AiService {
+  name: string;
+  description: string;
+  price: number | null;
+  isFromPrice: boolean;
+  durationMinutes: number | null;
+  requiresValuation: boolean;
+  sourceUrl?: string;
 }
 
-// Encuentra enlaces internos relevantes
-function extractInternalLinks(html: string, baseUrl: string): string[] {
-  const matches = Array.from(html.matchAll(/href=["']([^"']+)["']/gi));
-  const base = new URL(baseUrl);
-  const relevantKeywords = ["servicio", "tratamiento", "precio", "tarifa", "contacto", "horario", "cita", "especialidad"];
-  const links = new Set<string>();
+interface AiResult {
+  business?: { name?: string; activity?: string; address?: string; city?: string; hours?: string };
+  services?: AiService[];
+  faqs?: { question: string; answer: string; sourceUrl?: string }[];
+  knowledge?: string;
+}
 
-  for (const m of matches) {
-    const rawHref = m[1];
-    try {
-      const resolved = new URL(rawHref, base);
-      if (resolved.origin === base.origin && resolved.pathname !== base.pathname) {
-        const lower = resolved.pathname.toLowerCase();
-        if (relevantKeywords.some((k) => lower.includes(k))) {
-          links.add(resolved.href);
-        }
-      }
-    } catch {
-      // Ignorar URLs malformadas
+const SYSTEM = `Eres un analista que extrae, con EXACTITUD, la información de la web de un negocio para configurar a su asistente de atención al cliente por WhatsApp.
+
+Reglas obligatorias:
+- Usa SOLO información que esté escrita en el texto recibido. Nunca inventes, completes ni supongas datos. Si algo no aparece, usa null o déjalo fuera.
+- Copia nombres de servicios, precios, horarios y condiciones tal como aparecen (puedes corregir mayúsculas y espacios).
+- Precios: número entero en la moneda local, sin símbolos ni separadores ("$1.500.000" → 1500000; "1,5 millones" → 1500000). Si dice "desde", "a partir de" o similar → isFromPrice true. Si el precio no aparece → price null.
+- durationMinutes solo si la web indica la duración; si no, null.
+- requiresValuation true solo si la web dice que requiere valoración, evaluación o cotización previa.
+- Un servicio por cada servicio, producto o plan distinto que ofrezca el negocio. No dupliques.
+- FAQs: incluye todas las preguntas frecuentes explícitas de la web. Además puedes redactar preguntas que haría un cliente (horarios, ubicación, formas de pago, envíos, garantía, reservas…) SOLO si la respuesta está literalmente respaldada por el texto. Respuestas breves, en segunda persona, tono cordial.
+- knowledge: en Markdown, con secciones (## Sobre el negocio, ## Horarios, ## Formas de pago, ## Políticas, ## Cobertura y envíos, ## Promociones…) solo con lo que diga la web. Nada de relleno ni frases de marketing vacías.
+- sourceUrl: la URL de la página de donde sale cada dato.
+
+Responde ÚNICAMENTE con JSON válido con esta forma:
+{
+  "business": { "name": string|null, "activity": string|null, "address": string|null, "city": string|null, "hours": string|null },
+  "services": [ { "name": string, "description": string, "price": number|null, "isFromPrice": boolean, "durationMinutes": number|null, "requiresValuation": boolean, "sourceUrl": string } ],
+  "faqs": [ { "question": string, "answer": string, "sourceUrl": string } ],
+  "knowledge": string
+}`;
+
+/** Todos los números que aparecen en el texto, sin separadores, para verificar precios. */
+function numbersIn(text: string): Set<string> {
+  const set = new Set<string>();
+  for (const m of text.matchAll(/\d[\d.,\s]*\d|\d/g)) {
+    const raw = m[0].replace(/\s/g, "");
+    set.add(raw.replace(/[.,]/g, ""));
+    // "1,5 millones" / "2.5 M"
+    const after = text.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 10).toLowerCase();
+    if (/^\s*(millones|millón|millon|m\b|mm\b)/.test(after)) {
+      const n = parseFloat(raw.replace(",", "."));
+      if (Number.isFinite(n)) set.add(String(Math.round(n * 1_000_000)));
     }
-    if (links.size >= 4) break;
+    if (/^\s*(mil\b|k\b)/.test(after)) {
+      const n = parseFloat(raw.replace(",", "."));
+      if (Number.isFinite(n)) set.add(String(Math.round(n * 1000)));
+    }
   }
-
-  return Array.from(links);
+  return set;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { url } = await req.json();
-
-    if (!url || !url.startsWith("http")) {
-      return NextResponse.json({ error: "Introduce una URL válida que empiece por http:// o https://" }, { status: 400 });
-    }
-
-    console.log(`🌐 [Web-Importer] Descargando contenido de ${url}...`);
-
-    let mainHtml = "";
+    const body = await req.json().catch(() => ({}));
+    let raw = String(body.url || "").trim();
+    if (raw && !/^https?:\/\//i.test(raw)) raw = `https://${raw}`;
     try {
-      const res = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) SintiaBot/1.0",
-        },
-        signal: AbortSignal.timeout(10000),
-      });
-      mainHtml = await res.text();
+      new URL(raw);
+    } catch {
+      return NextResponse.json({ error: "Introduce una URL válida, por ejemplo https://tunegocio.com" }, { status: 400 });
+    }
+
+    // 1. Portada
+    let home;
+    try {
+      home = await fetchPage(raw);
     } catch (err: any) {
-      return NextResponse.json({ error: `No se pudo conectar con la web: ${err.message}` }, { status: 400 });
+      return NextResponse.json({ error: err.message || "No se pudo conectar con la web." }, { status: 400 });
     }
+    if (!home) return NextResponse.json({ error: "La web no respondió con una página HTML." }, { status: 400 });
 
-    // Extraer enlaces internos
-    const subLinks = extractInternalLinks(mainHtml, url);
-    let aggregatedText = `PÁGINA PRINCIPAL (${url}):\n${cleanHtml(mainHtml).slice(0, 4000)}\n\n`;
+    // 2. Subpáginas priorizadas, en paralelo
+    const subUrls = rankInternalLinks(home.html, home.url, MAX_PAGES - 1);
+    const subPages = await Promise.all(subUrls.map((u) => fetchPage(u, 10000).catch(() => null)));
+    const pages = [home, ...subPages.filter((p): p is { url: string; html: string } => !!p)];
 
-    // Descargar hasta 4 subpáginas
-    for (const subUrl of subLinks) {
+    // 3. Contactos deterministas (sin IA: teléfonos, correos, WhatsApp, redes, JSON-LD)
+    let contacts: ContactInfo | undefined;
+    for (const p of pages) contacts = extractContacts(p.html, p.url, contacts);
+    contacts = contacts!;
+
+    const pageTexts = pages.map((p) => ({ url: p.url, title: pageTitle(p.html), text: htmlToText(p.html).slice(0, PAGE_CHARS) }));
+    let corpus = "";
+    for (const p of pageTexts) {
+      if (corpus.length >= TOTAL_CHARS) break;
+      corpus += `\n\n=== PÁGINA: ${p.title || "(sin título)"} — ${p.url} ===\n${p.text}`;
+    }
+    corpus = corpus.slice(0, TOTAL_CHARS);
+
+    const warnings: string[] = [];
+    let ai: AiResult = {};
+
+    // 4. Extracción con IA (solo lo que está escrito)
+    if (hasLlm()) {
       try {
-        const subRes = await fetch(subUrl, {
-          headers: { "User-Agent": "Mozilla/5.0 SintiaBot/1.0" },
-          signal: AbortSignal.timeout(6000),
+        ai = await generateJson<AiResult>({
+          system: SYSTEM,
+          parts: [
+            {
+              text: `Web: ${home.url}\nDatos de contacto ya detectados automáticamente (no los repitas en FAQs salvo que aporten contexto):\n${JSON.stringify(contacts)}\n\nTexto de las páginas:${corpus}`,
+            },
+          ],
+          maxTokens: 8192,
+          timeoutMs: 90000,
         });
-        const subHtml = await subRes.text();
-        aggregatedText += `SUBPÁGINA (${subUrl}):\n${cleanHtml(subHtml).slice(0, 2500)}\n\n`;
-      } catch {
-        // Continuar si una subpágina falla
+      } catch (err: any) {
+        console.warn("[Web-Importer] Fallo de la IA:", err.message);
+        warnings.push(`La IA no pudo analizar el contenido (${err.message}). Solo se muestran los datos de contacto detectados.`);
       }
+    } else {
+      warnings.push("No hay clave de IA configurada: solo se detectaron los datos de contacto. Configura GEMINI_API_KEY u OPENROUTER_API_KEY para extraer servicios y preguntas frecuentes.");
     }
 
-    // Comprobar si hay clave de OpenRouter configurada
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    const config = await db.assistantConfig.findFirst();
-    const model = config?.model || process.env.DEFAULT_MODEL || "anthropic/claude-haiku-5.5";
-
-    let proposal: any = null;
-
-    if (apiKey) {
-      console.log(`🤖 [Web-Importer] Procesando texto extraído con OpenRouter (${model})...`);
-      try {
-        const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-            "HTTP-Referer": process.env.APP_URL || "http://localhost:3000",
-            "X-Title": "Sintia",
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              {
-                role: "system",
-                content: `Eres un asistente que analiza el texto de la página web de un negocio local y extrae información estructurada para configurar un asistente de atención al cliente.
-Debes responder ÚNICAMENTE con un JSON válido con la siguiente estructura exacta:
-{
-  "business": {
-    "name": "nombre del negocio",
-    "activity": "breve descripción de su actividad",
-    "address": "dirección física si aparece",
-    "phone": "teléfono si aparece",
-    "website": "${url}"
-  },
-  "services": [
-    {
-      "name": "nombre del servicio",
-      "description": "breve descripción",
-      "durationMinutes": 30,
-      "price": 50,
-      "isFromPrice": false,
-      "requiresValuation": false
-    }
-  ],
-  "faqs": [
-    {
-      "question": "pregunta frecuente identificada",
-      "answer": "respuesta clara basada en la web"
-    }
-  ]
-}`,
-              },
-              {
-                role: "user",
-                content: `Analiza el siguiente texto extraído del sitio web ${url} y propón los servicios, preguntas frecuentes y datos del negocio:\n\n${aggregatedText.slice(0, 15000)}`,
-              },
-            ],
-            response_format: { type: "json_object" },
-          }),
-        });
-
-        if (aiRes.ok) {
-          const aiData = await aiRes.json();
-          const content = aiData.choices?.[0]?.message?.content;
-          if (content) {
-            proposal = JSON.parse(content);
-          }
-        }
-      } catch (e) {
-        console.warn("Fallo llamada a OpenRouter en importador web:", e);
-      }
+    // 5. Validación y verificación contra el texto original
+    const sourceNumbers = numbersIn(corpus);
+    const seen = new Set<string>();
+    const services = (Array.isArray(ai.services) ? ai.services : [])
+      .filter((s) => s && typeof s.name === "string" && s.name.trim())
+      .filter((s) => {
+        const k = s.name.trim().toLowerCase();
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      })
+      .map((s) => {
+        const price = typeof s.price === "number" && s.price >= 0 ? Math.round(s.price) : null;
+        const duration =
+          typeof s.durationMinutes === "number" && s.durationMinutes >= 5 && s.durationMinutes <= 720 ? Math.round(s.durationMinutes) : null;
+        return {
+          name: s.name.trim(),
+          description: (s.description || "").trim(),
+          price,
+          isFromPrice: !!s.isFromPrice,
+          durationMinutes: duration,
+          requiresValuation: !!s.requiresValuation,
+          sourceUrl: s.sourceUrl || null,
+          // El precio no aparece en el texto descargado: se marca para revisión manual
+          priceUnverified: price !== null && price > 0 && !sourceNumbers.has(String(price)),
+        };
+      });
+    if (services.some((s) => s.priceUnverified)) {
+      warnings.push("Algunos precios no se encontraron literalmente en la web: revísalos antes de guardar (marcados en ámbar).");
     }
 
-    // Si no hubo clave o falló la IA, generar propuesta heurística enriquecida
-    if (!proposal) {
-      proposal = {
-        business: {
-          name: "Negocio Extraído",
-          activity: "Servicios profesionales detectados en la web",
-          address: "Dirección identificada en contacto",
-          phone: "+34 900 000 000",
-          website: url,
-        },
-        services: [
-          {
-            name: "Consulta o Visita Inicial",
-            description: "Evaluación y diagnóstico inicial extraído de la web.",
-            durationMinutes: 30,
-            price: 0,
-            isFromPrice: false,
-            requiresValuation: false,
-          },
-          {
-            name: "Tratamiento / Servicio Estándar",
-            description: "Servicio principal destacado en los contenidos analizados.",
-            durationMinutes: 45,
-            price: 60,
-            isFromPrice: true,
-            requiresValuation: false,
-          },
-        ],
-        faqs: [
-          {
-            question: "¿Cómo puedo solicitar una cita o presupuesto?",
-            answer: "Puedes agendar directamente a través de nuestro asistente virtual o llamando al teléfono del negocio.",
-          },
-          {
-            question: "¿Dónde están ubicadas las instalaciones?",
-            answer: "Consulta la dirección y horarios en nuestra ficha de contacto.",
-          },
-        ],
-      };
-    }
+    const faqs = (Array.isArray(ai.faqs) ? ai.faqs : [])
+      .filter((f) => f && f.question?.trim() && f.answer?.trim())
+      .map((f) => ({ question: f.question.trim(), answer: f.answer.trim(), sourceUrl: f.sourceUrl || null }));
+
+    const name = ai.business?.name || contacts.names[0] || pageTitle(home.html).split(/[|\-–—]/)[0].trim() || "";
+    const address = ai.business?.address || contacts.addresses[0] || "";
+    const hours = ai.business?.hours || contacts.hours.join("; ") || "";
 
     return NextResponse.json({
       success: true,
-      scrapedPagesCount: 1 + subLinks.length,
-      proposal,
+      scrapedPagesCount: pages.length,
+      pages: pageTexts.map((p) => ({ url: p.url, title: p.title })),
+      warnings,
+      proposal: {
+        business: {
+          name,
+          activity: ai.business?.activity || contacts.description || "",
+          address: [address, ai.business?.city && !address.includes(ai.business.city) ? ai.business.city : ""].filter(Boolean).join(", "),
+          phone: contacts.phones[0] || contacts.whatsapp[0] || "",
+          website: new URL(home.url).origin,
+        },
+        contact: {
+          phones: contacts.phones,
+          whatsapp: contacts.whatsapp,
+          emails: contacts.emails,
+          socials: contacts.socials,
+          hours,
+        },
+        services,
+        faqs,
+        knowledge: typeof ai.knowledge === "string" ? ai.knowledge.trim() : "",
+      },
     });
   } catch (error: any) {
     console.error("Error en importador web:", error);
