@@ -24,7 +24,39 @@ interface MessageBufferItem {
 }
 
 const messageBuffers = new Map<string, MessageBufferItem>();
-const DEBOUNCE_DELAY_MS = 8000; // 8 segundos de espera para mensajes consecutivos
+const DEBOUNCE_DELAY_MS = 3500; // 3.5 segundos de espera para agrupar mensajes antes de redactar
+
+/**
+ * Simula el estado natural de "escribiendo..." en WhatsApp para que el cliente
+ * visualice en la barra superior del chat la animación 'escribiendo...' antes del envío.
+ */
+async function simulateTypingAndSend(sock: any, jid: string, text: string) {
+  try {
+    await sock.presenceSubscribe(jid);
+    await sock.sendPresenceUpdate("composing", jid);
+  } catch {}
+
+  // Duración orgánica de digitación (~22ms por carácter, mín 2 seg, máx 4.5 seg)
+  const typingDurationMs = Math.min(Math.max(text.length * 22, 2000), 4500);
+
+  // Mantener el estado "composing" fresco cada 1.8 segundos
+  const interval = setInterval(async () => {
+    try {
+      await sock.sendPresenceUpdate("composing", jid);
+    } catch {}
+  }, 1800);
+
+  await new Promise((resolve) => setTimeout(resolve, typingDurationMs));
+  clearInterval(interval);
+
+  // Despachar mensaje por WhatsApp
+  await sock.sendMessage(jid, { text });
+
+  // Detener estado de escritura
+  try {
+    await sock.sendPresenceUpdate("paused", jid);
+  } catch {}
+}
 
 export async function initWhatsAppWorker() {
   console.log("📱 [WhatsApp-Worker] Cargando motor Baileys...");
@@ -203,7 +235,7 @@ export async function initWhatsAppWorker() {
         const audioNotice =
           "He recibido tu audio o imagen, pero por el momento solo puedo leer mensajes de texto. Por favor, escríbeme lo que necesitas en texto para poder atenderte enseguida.";
 
-        await sock.sendMessage(remoteJid, { text: audioNotice });
+        await simulateTypingAndSend(sock, remoteJid, audioNotice);
 
         await db.message.create({
           data: {
@@ -396,13 +428,8 @@ async function processBufferedMessages(sock: any, jid: string) {
       conversationId: conversation.id,
     });
 
-    // 7. Enviar respuesta por WhatsApp
-    await sock.sendMessage(jid, { text: aiResponse.reply });
-
-    // Quitar presencia
-    try {
-      await sock.sendPresenceUpdate("paused", jid);
-    } catch {}
+    // 7. Simular animación "escribiendo..." en WhatsApp y enviar respuesta
+    await simulateTypingAndSend(sock, jid, aiResponse.reply);
 
     // 8. Guardar mensaje del asistente en DB con herramientas utilizadas
     const assistantMsg = await db.message.create({
