@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/Toast";
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   MessageSquare,
@@ -260,8 +261,10 @@ export default function ConversacionesPage() {
       if (res.ok) {
         loadActiveConversation(selectedId);
       } else {
-        // En caso de fallo, restaurar texto
+        // En caso de fallo, restaurar texto y mostrar el motivo (ej. ventana de 24 h de WhatsApp)
         setReplyText(text);
+        const data = await res.json().catch(() => ({}));
+        toast.error("No se pudo enviar", data.error || "Inténtalo de nuevo.");
       }
     } catch (err) {
       console.error(err);

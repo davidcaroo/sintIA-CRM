@@ -141,7 +141,7 @@ export default function ResumenPage() {
                     whatsappChannel?.status === "connected" ? "bg-emerald-500" : "bg-amber-400"
                   }`}
                 />
-                <span className="font-semibold text-slate-800 dark:text-slate-200">WhatsApp (Baileys)</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">WhatsApp (Cloud API)</span>
               </div>
               <span className="text-slate-500 dark:text-slate-400">
                 {whatsappChannel?.status === "connected"

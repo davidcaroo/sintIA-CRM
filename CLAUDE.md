@@ -12,15 +12,15 @@ El proyecto opera con dos procesos principales que comparten el mismo código fu
    - Interfaz gráfica del panel de administración (`src/app/(dashboard)`).
    - Rutas API (`src/app/api/...`), autenticación basada en JWT (`src/lib/auth.ts`, `src/middleware.ts`).
    - Widget de chat web embebible (`/api/widget.js`, `/api/chat`).
-   - Endpoints SSE para streaming de eventos y QR en tiempo real (`/api/channels/whatsapp/sse`, `/api/conversations/stream`).
+   - Webhook público de WhatsApp Cloud API (`/api/webhooks/whatsapp/[token]`): valida token de ruta + firma `x-hub-signature-256` y guarda cada mensaje en `WhatsAppInbound` **antes** de responder 200.
+   - Endpoint SSE para streaming de eventos (`/api/conversations/stream`).
    
 2. **`worker` (Node.js de larga duración):**
    - Reside en [`worker/index.ts`](file:///c:/Users/Ingca/OneDrive/Documentos/Asistente de IA%20-%20Antigravity/worker/index.ts).
-   - Mantiene la conexión del socket de WhatsApp mediante Baileys (`worker/whatsapp.ts`).
-   - Implementa un **búfer de debouncing de 8 segundos** para agrupar ráfagas de mensajes del mismo cliente antes de llamar a la IA.
+   - Lee `WhatsAppInbound` (`worker/whatsapp.ts`), agrupa ráfagas del mismo cliente con un **debounce de 3,5 s**, llama a la IA y responde por la Cloud API. Un mensaje solo se marca procesado al terminar su ráfaga.
    - Ejecuta las tareas programadas periódicas (`worker/scheduler.ts`): recordatorios de citas y resúmenes diarios por correo.
 
-> **IMPORTANTE:** Ambos procesos se comunican a través de la base de datos (tabla `ChannelState` y `Conversation`) y a través del bus de eventos en memoria/PostgreSQL. **Nunca intentes inicializar Baileys dentro de una Serverless Route de Next.js**, Baileys requiere un proceso persistente de Node.js.
+> **IMPORTANTE:** Ambos procesos se comunican a través de la base de datos (tablas `ChannelState`, `WhatsAppInbound` y `Conversation`). Toda llamada a Meta pasa por [`src/lib/whatsapp/cloud.ts`](src/lib/whatsapp/cloud.ts) (HTTP puro, sirve en ambos procesos). **Nunca importes `worker/*` desde rutas de Next.js.** Fuera de la ventana de 24 h desde el último mensaje del cliente solo se permiten plantillas aprobadas.
 
 ---
 
@@ -48,6 +48,7 @@ npm run build
 # Ejecutar suite de pruebas unitarias
 npx tsx tests/events-bus.test.ts
 npx tsx tests/lab-judge.test.ts
+npx tsx tests/whatsapp-cloud.test.ts
 ```
 
 ---
@@ -59,8 +60,9 @@ npx tsx tests/lab-judge.test.ts
    - **Nunca** envíes tokens completos al cliente web en respuestas JSON. Muestra únicamente prefijos enmascarados (ej: `rk_test_••••••••`).
 2. **Claves de IA:**
    - La variable `OPENROUTER_API_KEY` reside exclusivamente en el entorno del servidor y **nunca debe filtrarse al navegador**.
-3. **Persistencia de Sesión de WhatsApp:**
-   - La carpeta configurada en `WHATSAPP_SESSION_DIR` (por defecto `./whatsapp-session`) almacena las claves de autenticación multi-dispositivo de Baileys. **Siempre debe estar excluida en `.gitignore`** y montada como volumen en Docker/Coolify/Railway.
+3. **WhatsApp Cloud API (Meta):**
+   - El token de Meta se guarda cifrado en `ChannelState.encryptedCredentials`; WABA ID, Phone Number ID y plantilla de recordatorio en `ChannelState.config`.
+   - Define `META_APP_SECRET` en producción para verificar la firma de cada webhook. `APP_URL` debe ser pública con HTTPS.
 
 ---
 

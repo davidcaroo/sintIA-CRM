@@ -61,7 +61,7 @@ Accede a la consola de administración en [http://localhost:3000](http://localho
    - **Stripe**: Cobro de señales por servicio con enlaces de pago protegidos.
    - **Webhooks**: Integración con n8n, Make, Zapier mediante firmas HMAC-SHA256.
 5. **Canales (`/canales`)**:
-   - **WhatsApp**: Conexión por código QR en vivo mediante Baileys con persistencia en disco y búfer inteligente de 8 segundos para no pisar mensajes continuos.
+   - **WhatsApp**: Conexión oficial por WhatsApp Cloud API de Meta (WABA ID + Phone Number ID + token), registro automático del webhook, indicador "escribiendo…" nativo y búfer que agrupa mensajes continuos.
    - **Chat Web**: Personalizador visual de burbuja (color, texto, avatar), código de inserción `<script>` y página interactiva de prueba en [`/demo`](http://localhost:3000/demo).
 6. **Probar (`/probar`)**: Entorno de pruebas interactivo con simulador de cliente y **Línea de tiempo de razonamiento** que desglosa en tiempo real cada llamada a herramienta con sus parámetros y respuesta. Incluye interruptor de **Modo Seguro** para simular escrituras sin tocar APIs externas.
 7. **Conversaciones (`/conversaciones`)**: Bandeja de entrada estilo chat en dos columnas con filtros (*Todas, Necesitan atención, WhatsApp, Web*), distintivos por canal y botón **Tomar el control** para pausar al asistente y responder manualmente.
@@ -118,10 +118,11 @@ Para activar **Google Calendar**, **Gmail** y **Google Sheets**:
 
 ## 💬 Conexión de WhatsApp
 
-1. Dirígete a **Canales > WhatsApp** en el panel.
-2. Escanea el código QR que se actualiza automáticamente con tu aplicación de WhatsApp (en *Dispositivos vinculados*).
-3. La sesión se guarda en la carpeta configurada en `WHATSAPP_SESSION_DIR` (por defecto `./whatsapp-session`) y reconecta de forma autónoma ante caídas o reinicios.
-4. El búfer de mensajes de 8 segundos agrupa automáticamente los mensajes consecutivos de un cliente para responder de manera coherente sin generar llamadas redundantes a la IA.
+1. En [developers.facebook.com](https://developers.facebook.com) crea una app de tipo **Empresa** con el producto **WhatsApp**.
+2. Genera un token permanente de **usuario del sistema** con `whatsapp_business_messaging` y `whatsapp_business_management`.
+3. En **Canales > WhatsApp** pega el **WABA ID**, el **Phone Number ID** y el token. Sintia valida el token contra Meta, lo guarda cifrado y registra el webhook en tu número automáticamente.
+4. `APP_URL` debe ser pública con HTTPS (en local, usa un túnel como cloudflared o ngrok). Define `META_APP_SECRET` para verificar la firma de cada evento.
+5. Los mensajes consecutivos de un cliente se agrupan antes de llamar a la IA. Fuera de la ventana de 24 h, los recordatorios usan la plantilla aprobada que configures.
 
 ---
 
@@ -150,5 +151,5 @@ docker compose up -d --build
 - **Framework:** Next.js (App Router), TypeScript, Tailwind CSS.
 - **Base de datos:** PostgreSQL, Prisma ORM, PGlite (driver embebido de desarrollo).
 - **IA & NLP:** OpenRouter API (compatible OpenAI tools).
-- **Mensajería:** `@whiskeysockets/baileys` para WhatsApp Web Multi-Device.
+- **Mensajería:** WhatsApp Cloud API de Meta (Graph API, sin dependencias).
 - **Seguridad:** Cifrado simétrico AES-256-GCM para credenciales, hashing bcrypt y tokens JWT firmados con jose.

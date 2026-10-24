@@ -100,10 +100,13 @@ model Integration {
 model ChannelState {
   id              String   @id // whatsapp, webchat
   isActive        Boolean  @default(true)
-  status          String   @default("disconnected") // disconnected, waiting_qr, connected
-  qrCode          String?  @db.Text
+  status          String   @default("disconnected") // disconnected, connected, error
+  qrCode          String?  @db.Text // obsoleto (Baileys), se conserva para no romper datos existentes
   connectedNumber String?
   connectedName   String?
+  // WhatsApp Cloud API (Meta): token cifrado con AES-256-GCM + { wabaId, phoneNumberId, reminderTemplate }
+  encryptedCredentials String? @db.Text
+  config          Json?
   widgetColor     String   @default("#0f172a")
   welcomeText     String   @default("¡Hola! ¿Tienes dudas o quieres pedir cita? Escríbenos.")
   updatedAt       DateTime @updatedAt
@@ -175,4 +178,18 @@ model ActivityLog {
   error         String?  @db.Text
   metadata      Json?
   createdAt     DateTime @default(now())
+}
+
+// Mensajes entrantes de WhatsApp Cloud API. El webhook (web) los guarda antes de
+// responder 200 a Meta; el worker los procesa. El id es el wamid: deduplica reintentos de Meta.
+model WhatsAppInbound {
+  id          String    @id
+  waId        String
+  name        String?
+  type        String
+  text        String    @db.Text
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([processedAt])
 }

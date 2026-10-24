@@ -13,27 +13,39 @@ import {
   ExternalLink,
   Save,
   CheckCircle2,
-  RefreshCw,
   LogOut,
-  QrCode,
+  KeyRound,
+  Link2,
+  AlertTriangle,
+  ShieldCheck,
 } from "lucide-react";
 
 interface WhatsAppState {
-  status: "disconnected" | "waiting_qr" | "connected";
-  qrCode: string | null;
+  status: "disconnected" | "connected" | "error";
   connectedNumber: string | null;
   connectedName: string | null;
+  wabaId: string;
+  phoneNumberId: string;
+  reminderTemplate: string;
+  reminderTemplateLang: string;
+  tokenMasked: string | null;
+  webhookUrl: string;
+  verifyToken: string;
+  signatureEnabled: boolean;
 }
 
+const inputClass =
+  "w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400";
+const labelClass = "block font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5";
+
 export default function CanalesPage() {
-  // Estado WhatsApp (SSE)
-  const [waState, setWaState] = useState<WhatsAppState>({
-    status: "disconnected",
-    qrCode: null,
-    connectedNumber: null,
-    connectedName: null,
-  });
+  // Estado WhatsApp Cloud API
+  const [waState, setWaState] = useState<WhatsAppState | null>(null);
+  const [waForm, setWaForm] = useState({ wabaId: "", phoneNumberId: "", token: "", reminderTemplate: "", reminderTemplateLang: "es" });
+  const [waSaving, setWaSaving] = useState(false);
   const [waDisconnecting, setWaDisconnecting] = useState(false);
+  const [webhookWarning, setWebhookWarning] = useState<string | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Estado Webchat
   const [webActive, setWebActive] = useState(true);
@@ -43,68 +55,26 @@ export default function CanalesPage() {
   const [webSaved, setWebSaved] = useState(false);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
 
-  // Escuchar stream SSE de WhatsApp y fallback con polling
-  useEffect(() => {
-    let isMounted = true;
-
-    // 1. Carga inicial inmediata por REST
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch("/api/channels/whatsapp/status");
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted && data) {
-            setWaState((prev) => ({
-              status: data.status,
-              qrCode: data.qrCode,
-              connectedNumber: data.connectedNumber,
-              connectedName: data.connectedName,
-            }));
-          }
-        }
-      } catch (e) {
-        // Silencioso
-      }
-    };
-
-    fetchStatus();
-
-    // Polling de respaldo cada 3 segundos en caso de que SSE se interrumpa o bufferice
-    const pollInterval = setInterval(fetchStatus, 3000);
-
-    // 2. Conexión SSE en tiempo real
-    let eventSource: EventSource | null = null;
+  const loadWhatsApp = async () => {
     try {
-      eventSource = new EventSource("/api/channels/whatsapp/sse");
-
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (isMounted) {
-            setWaState({
-              status: data.status,
-              qrCode: data.qrCode,
-              connectedNumber: data.connectedNumber,
-              connectedName: data.connectedName,
-            });
-          }
-        } catch (err) {
-          console.error("Error parseando SSE WhatsApp:", err);
-        }
-      };
-
-      eventSource.onerror = () => {
-        // El navegador reintentará automáticamente y el polling de respaldo sigue activo
-      };
-    } catch (e) {
-      console.warn("EventSource no soportado o bloqueado:", e);
+      const res = await fetch("/api/channels/whatsapp/status");
+      if (!res.ok) return;
+      const data: WhatsAppState = await res.json();
+      setWaState(data);
+      setWaForm({
+        wabaId: data.wabaId,
+        phoneNumberId: data.phoneNumberId,
+        token: "",
+        reminderTemplate: data.reminderTemplate,
+        reminderTemplateLang: data.reminderTemplateLang || "es",
+      });
+    } catch {
+      // Silencioso
     }
+  };
 
-    return () => {
-      isMounted = false;
-      clearInterval(pollInterval);
-      if (eventSource) eventSource.close();
-    };
+  useEffect(() => {
+    loadWhatsApp();
   }, []);
 
   // Cargar configuración de Webchat
@@ -120,10 +90,39 @@ export default function CanalesPage() {
       });
   }, []);
 
+  const handleConnectWhatsApp = async () => {
+    setWaSaving(true);
+    setWebhookWarning(null);
+    try {
+      const res = await fetch("/api/channels/whatsapp/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(waForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error("No se pudo conectar", data.error || "Revisa los datos de tu app de Meta.");
+        return;
+      }
+      if (data.webhook && !data.webhook.ok) {
+        setWebhookWarning(data.webhook.message);
+        toast.warning("Número conectado", "Falta registrar el webhook en Meta. Revisa el aviso.");
+      } else {
+        toast.success("WhatsApp conectado", `Sintia ya atiende el número ${data.displayPhoneNumber}.`);
+      }
+      await loadWhatsApp();
+    } catch (err) {
+      console.error(err);
+      toast.error("Error", "No se pudo contactar el servidor.");
+    } finally {
+      setWaSaving(false);
+    }
+  };
+
   const handleDisconnectWhatsApp = async () => {
     const ok = await confirmDialog({
       title: "¿Desconectar WhatsApp?",
-      description: "¿Deseas cerrar la sesión activa de WhatsApp? El bot dejará de responder mensajes en este número.",
+      description: "Se quitará el webhook del número y se borrará el token. El bot dejará de responder; las conversaciones se conservan.",
       confirmText: "Desconectar",
       destructive: true,
     });
@@ -132,13 +131,21 @@ export default function CanalesPage() {
     setWaDisconnecting(true);
     try {
       await fetch("/api/channels/whatsapp/disconnect", { method: "POST" });
-      toast.info("WhatsApp desconectado", "La sesión se ha cerrado correctamente.");
+      toast.info("WhatsApp desconectado", "El número ya no está vinculado a Sintia.");
+      setWebhookWarning(null);
+      await loadWhatsApp();
     } catch (err) {
       console.error(err);
       toast.error("Error", "No se pudo desconectar WhatsApp.");
     } finally {
       setWaDisconnecting(false);
     }
+  };
+
+  const handleCopy = (field: string, value: string) => {
+    navigator.clipboard.writeText(value);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
   };
 
   const handleSaveWebchat = async () => {
@@ -186,23 +193,18 @@ export default function CanalesPage() {
                 <Smartphone className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">WhatsApp Business / Personal</h2>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">WhatsApp Business</h2>
                 <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Conexión directa mediante Baileys y sincronización en disco.
+                  Conexión oficial mediante la WhatsApp Cloud API de Meta.
                 </div>
               </div>
             </div>
 
             <div>
-              {waState.status === "connected" ? (
+              {waState?.status === "connected" ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   Conectado
-                </span>
-              ) : waState.status === "waiting_qr" ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                  Esperando QR
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
@@ -212,8 +214,8 @@ export default function CanalesPage() {
             </div>
           </div>
 
-          {/* Estado Conectado */}
-          {waState.status === "connected" ? (
+          {/* Número conectado */}
+          {waState?.status === "connected" && (
             <div className="p-6 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-center space-y-4">
               <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
                 <CheckCircle2 className="w-8 h-8" />
@@ -226,7 +228,7 @@ export default function CanalesPage() {
                   {waState.connectedNumber}
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-sm mx-auto">
-                  El asistente está atendiendo mensajes entrantes, aplicando el filtro de 8 segundos y respondiendo a los clientes.
+                  El asistente recibe los mensajes por webhook, agrupa las ráfagas del cliente y responde por la API oficial.
                 </p>
               </div>
 
@@ -240,46 +242,144 @@ export default function CanalesPage() {
                 <span>{waDisconnecting ? "Desconectando..." : "Desconectar número"}</span>
               </button>
             </div>
-          ) : (
-            /* Estado Esperando QR o Desconectado */
-            <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 space-y-2">
-                <div className="font-semibold text-slate-800 dark:text-slate-200">Pasos para conectar:</div>
-                <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  <li>Abre WhatsApp en tu teléfono móvil.</li>
-                  <li>Ve a <strong>Ajustes &gt; Dispositivos vinculados</strong>.</li>
-                  <li>Toca en <strong>Vincular un dispositivo</strong> y enfoca este código QR.</li>
-                </ol>
-              </div>
+          )}
 
-              <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-800 flex flex-col items-center justify-center min-h-[340px] text-center">
-                {waState.qrCode ? (
-                  <div className="space-y-3">
-                    <div className="p-3 bg-white rounded-2xl shadow-md border border-slate-200 inline-block">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={waState.qrCode}
-                        alt="Código QR de WhatsApp"
-                        className="w-64 h-64 object-contain mx-auto rounded-lg"
-                      />
-                    </div>
-                    <div className="flex items-center justify-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600 dark:text-indigo-400" />
-                      <span>El código se actualiza automáticamente en vivo</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3 text-slate-400 dark:text-slate-500">
-                    <QrCode className="w-16 h-16 stroke-1 mx-auto text-slate-300 dark:text-slate-600 animate-pulse" />
-                    <div className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                      Iniciando conexión con Baileys...
-                    </div>
-                    <p className="text-[11px] max-w-xs text-slate-400 dark:text-slate-500">
-                      El proceso Worker está arrancando el socket. El código QR aparecerá aquí en unos segundos.
-                    </p>
-                  </div>
-                )}
+          {/* Pasos para conectar */}
+          {waState?.status !== "connected" && (
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 space-y-2">
+              <div className="font-semibold text-slate-800 dark:text-slate-200">Pasos para conectar:</div>
+              <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                <li>En <strong>developers.facebook.com</strong> crea una app de tipo <strong>Empresa</strong> y añade el producto <strong>WhatsApp</strong>.</li>
+                <li>En <strong>WhatsApp &gt; Configuración de la API</strong> copia el <strong>Phone Number ID</strong> y el <strong>WABA ID</strong>.</li>
+                <li>En <strong>Business Manager &gt; Usuarios del sistema</strong> genera un token permanente con los permisos <strong>whatsapp_business_messaging</strong> y <strong>whatsapp_business_management</strong>.</li>
+                <li>Pega los datos aquí: Sintia valida el token y registra el webhook en tu número automáticamente.</li>
+              </ol>
+            </div>
+          )}
+
+          {/* Formulario de credenciales */}
+          <div className="space-y-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>WABA ID</label>
+                <input
+                  type="text"
+                  value={waForm.wabaId}
+                  onChange={(e) => setWaForm({ ...waForm, wabaId: e.target.value })}
+                  placeholder="1234567890"
+                  className={inputClass}
+                />
               </div>
+              <div>
+                <label className={labelClass}>Phone Number ID</label>
+                <input
+                  type="text"
+                  value={waForm.phoneNumberId}
+                  onChange={(e) => setWaForm({ ...waForm, phoneNumberId: e.target.value })}
+                  placeholder="1098765432"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className={labelClass}>Token de acceso permanente</label>
+              <input
+                type="password"
+                autoComplete="off"
+                value={waForm.token}
+                onChange={(e) => setWaForm({ ...waForm, token: e.target.value })}
+                placeholder={waState?.tokenMasked ? `Guardado: ${waState.tokenMasked} (vacío = conservarlo)` : "EAAG..."}
+                className={inputClass}
+              />
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" />
+                Se guarda cifrado con AES-256-GCM y nunca se devuelve completo al navegador.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="sm:col-span-2">
+                <label className={labelClass}>Plantilla de recordatorio (opcional)</label>
+                <input
+                  type="text"
+                  value={waForm.reminderTemplate}
+                  onChange={(e) => setWaForm({ ...waForm, reminderTemplate: e.target.value })}
+                  placeholder="recordatorio_cita"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Idioma</label>
+                <input
+                  type="text"
+                  value={waForm.reminderTemplateLang}
+                  onChange={(e) => setWaForm({ ...waForm, reminderTemplateLang: e.target.value })}
+                  placeholder="es"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 -mt-2">
+              WhatsApp solo permite texto libre durante 24 h tras el último mensaje del cliente. Fuera de esa ventana, los recordatorios usan esta plantilla aprobada con las variables {"{{1}}"} nombre, {"{{2}}"} servicio y {"{{3}}"} hora.
+            </p>
+
+            {webhookWarning && (
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 flex gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>
+                  {webhookWarning} Puedes pegar la URL y el token de verificación de abajo en <strong>WhatsApp &gt; Configuración &gt; Webhook</strong> de tu app y suscribir el campo <strong>messages</strong>.
+                </span>
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleConnectWhatsApp}
+                disabled={waSaving || !waForm.wabaId || !waForm.phoneNumberId || (!waForm.token && !waState?.tokenMasked)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-xs transition"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>{waSaving ? "Validando con Meta..." : waState?.status === "connected" ? "Guardar cambios" : "Conectar número"}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Webhook */}
+          {waState && (
+            <div className="space-y-3 text-xs border-t border-slate-100 dark:border-slate-800 pt-4">
+              <div className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200">
+                <Link2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span>Webhook de Meta</span>
+              </div>
+              {[
+                { key: "url", label: "URL de devolución de llamada", value: waState.webhookUrl },
+                { key: "verify", label: "Token de verificación", value: waState.verifyToken },
+              ].map((f) => (
+                <div key={f.key}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">{f.label}</label>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(f.key, f.value)}
+                      className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1 transition"
+                    >
+                      {copiedField === f.key ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedField === f.key ? "Copiado" : "Copiar"}</span>
+                    </button>
+                  </div>
+                  <div className="p-3 bg-slate-900 dark:bg-black text-slate-200 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-800 break-all">
+                    <code>{f.value}</code>
+                  </div>
+                </div>
+              ))}
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                Sintia lo registra sola al conectar. La URL debe ser pública con HTTPS (define <code className="font-mono text-slate-600 dark:text-slate-400">APP_URL</code>; en local usa un túnel como cloudflared o ngrok).
+                {waState.signatureEnabled
+                  ? " La firma de cada evento se verifica con META_APP_SECRET."
+                  : " Define META_APP_SECRET para verificar la firma de cada evento."}
+              </p>
             </div>
           )}
         </div>

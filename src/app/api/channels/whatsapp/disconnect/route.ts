@@ -1,40 +1,24 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import fs from "fs";
-import path from "path";
+import { getWhatsAppCreds, unregisterWebhook } from "@/lib/whatsapp/cloud";
 
+/** Quita el webhook del número (si es el nuestro) y borra las credenciales. Las conversaciones se conservan. */
 export async function POST() {
   try {
-    const sessionDir = path.resolve(
-      process.cwd(),
-      process.env.WHATSAPP_SESSION_DIR || "./whatsapp-session"
-    );
+    const creds = await getWhatsAppCreds();
+    if (creds) await unregisterWebhook(creds);
 
-    // Limpiar base de datos
-    await db.channelState.update({
+    await db.channelState.upsert({
       where: { id: "whatsapp" },
-      data: {
-        status: "disconnected",
-        qrCode: null,
-        connectedNumber: null,
-        connectedName: null,
-      },
+      update: { status: "disconnected", qrCode: null, encryptedCredentials: null, connectedNumber: null, connectedName: null },
+      create: { id: "whatsapp", status: "disconnected" },
     });
-
-    // Purgar carpeta de sesión
-    try {
-      if (fs.existsSync(sessionDir)) {
-        fs.rmSync(sessionDir, { recursive: true, force: true });
-      }
-    } catch (e) {
-      console.warn("Aviso al borrar sesión WhatsApp:", e);
-    }
 
     await db.activityLog.create({
       data: {
         action: "whatsapp_disconnected",
         channel: "whatsapp",
-        details: "Sesión de WhatsApp desconectada por el administrador.",
+        details: "Número de WhatsApp Cloud API desconectado por el administrador.",
         status: "warning",
       },
     });

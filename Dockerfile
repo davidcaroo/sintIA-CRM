@@ -51,8 +51,7 @@ COPY --from=builder /app/scripts/entrypoint.sh ./entrypoint.sh
 
 RUN chmod +x ./entrypoint.sh
 
-# Crear directorio para la sesión de WhatsApp
-RUN mkdir -p /app/whatsapp-session && chown -R node:node /app
+RUN chown -R node:node /app
 
 USER node
 

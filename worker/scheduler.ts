@@ -1,13 +1,14 @@
 import { db } from "../src/lib/db";
 import { sendGmailEmail } from "../src/lib/integrations/google/gmail";
+import { getWhatsAppCreds, isWindowOpen, metaErrorMessage, sendWhatsAppTemplate, sendWhatsAppText } from "../src/lib/whatsapp/cloud";
 
-export function initScheduler(sockGetter?: any) {
+export function initScheduler() {
   console.log("⏰ [Scheduler] Tareas programadas inicializadas (Recordatorios WhatsApp y Resumen Diario).");
 
   // Comprobar cada 60 segundos
   setInterval(async () => {
     try {
-      await checkAppointmentReminders(sockGetter);
+      await checkAppointmentReminders();
       await checkDailySummaryEmail();
     } catch (err) {
       console.error("Error en tareas programadas:", err);
@@ -18,8 +19,9 @@ export function initScheduler(sockGetter?: any) {
 /**
  * Recordatorio automático por WhatsApp el día antes de cada cita creada por el asistente
  */
-async function checkAppointmentReminders(sock: any) {
-  if (!sock) return;
+async function checkAppointmentReminders() {
+  const creds = await getWhatsAppCreds();
+  if (!creds) return;
 
   const now = new Date();
   const tomorrowStart = new Date(now);
@@ -42,20 +44,54 @@ async function checkAppointmentReminders(sock: any) {
     include: { contact: true },
   });
 
+  if (!pendingAppointments.length) return;
+  const business = await db.businessInfo.findFirst();
+  const timeZone = business?.timezone || "America/Bogota";
+
   for (const app of pendingAppointments) {
     if (!app.contact?.phone) continue;
 
-    const jid = `${app.contact.phone.replace(/[^0-9]/g, "")}@s.whatsapp.net`;
     const hora = new Date(app.startTime).toLocaleTimeString("es-CO", {
       hour: "2-digit",
       minute: "2-digit",
-      timeZone: "America/Bogota",
+      timeZone,
     });
 
-    const reminderText = `¡Cordial saludo, ${app.contact.name || "estimado paciente"}! Le recordamos con gusto su cita de *${app.serviceName}* programada para mañana a las *${hora}* en Clínica Dental Lumen (Carrera 3ra # 6-45, Bocagrande, Cartagena de Indias). Si requiere reprogramarla o tiene alguna inquietud, puede responder con confianza a este mensaje. ¡Será un placer atenderle!`;
+    const reminderText = `¡Cordial saludo, ${app.contact.name || "estimado paciente"}! Le recordamos con gusto su cita de *${app.serviceName}* programada para mañana a las *${hora}* en ${business?.name || "nuestro centro"}${business?.address ? ` (${business.address})` : ""}. Si requiere reprogramarla o tiene alguna inquietud, puede responder con confianza a este mensaje. ¡Será un placer atenderle!`;
+
+    // Ventana de 24 h: dentro, texto libre; fuera, solo plantilla aprobada por Meta
+    const lastInbound = await db.message.findFirst({
+      where: { sender: "client", conversation: { contactId: app.contactId, channel: "whatsapp" } },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+    const windowOpen = isWindowOpen(lastInbound?.createdAt);
+    if (!windowOpen && !creds.reminderTemplate) {
+      await db.appointment.update({ where: { id: app.id }, data: { reminderSent: true } });
+      await db.activityLog.create({
+        data: {
+          action: "reminder_skipped",
+          channel: "whatsapp",
+          details: `Recordatorio no enviado a ${app.contact.name} (${app.contact.phone}): pasaron más de 24 h desde su último mensaje y no hay plantilla de recordatorio configurada en Canales.`,
+          status: "warning",
+        },
+      });
+      continue;
+    }
 
     try {
-      await sock.sendMessage(jid, { text: reminderText });
+      if (windowOpen) {
+        await sendWhatsAppText(app.contact.phone, reminderText, creds);
+      } else {
+        // Variables de la plantilla: {{1}} nombre, {{2}} servicio, {{3}} hora
+        await sendWhatsAppTemplate(
+          app.contact.phone,
+          creds.reminderTemplate!,
+          creds.reminderTemplateLang || "es",
+          [app.contact.name || "cliente", app.serviceName, hora],
+          creds
+        );
+      }
       await db.appointment.update({
         where: { id: app.id },
         data: { reminderSent: true },
@@ -72,7 +108,7 @@ async function checkAppointmentReminders(sock: any) {
 
       console.log(`📩 [Scheduler] Recordatorio enviado a ${app.contact.phone} para cita de las ${hora}h`);
     } catch (err) {
-      console.warn(`Error enviando recordatorio a ${app.contact.phone}:`, err);
+      console.warn(`Error enviando recordatorio a ${app.contact.phone}:`, metaErrorMessage(err));
     }
   }
 }

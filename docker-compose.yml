@@ -42,6 +42,9 @@ services:
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       WEBHOOK_URL: ${WEBHOOK_URL}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      # WhatsApp Cloud API (Meta): el webhook vive en el proceso web
+      META_APP_SECRET: ${META_APP_SECRET}
+      META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN}
       SEED_DEMO: ${SEED_DEMO:-false}
     labels:
       - "traefik.enable=true"
@@ -53,7 +56,7 @@ services:
       - default
       - traefik-proxy
 
-  # Proceso Worker: Baileys WhatsApp client de larga duración y tareas programadas
+  # Proceso Worker: procesa los mensajes de WhatsApp Cloud API con la IA y ejecuta tareas programadas
   worker:
     image: ${DOCKER_IMAGE:?Debe definirse DOCKER_IMAGE}
     command: worker
@@ -67,20 +70,16 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Debe definirse ENCRYPTION_KEY}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       DEFAULT_MODEL: ${DEFAULT_MODEL:-anthropic/claude-haiku-5.5}
-      WHATSAPP_SESSION_DIR: /app/whatsapp-session
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       APP_URL: https://${SUBDOMAIN:?Debe definirse SUBDOMAIN}
-    volumes:
-      - whatsapp_data:/app/whatsapp-session
     networks:
       - default
 
 volumes:
   db_data:
-  whatsapp_data:
 
 networks:
   default:

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { emitEvent } from "@/lib/events/bus";
+import { isWindowOpen, metaErrorMessage, sendWhatsAppText } from "@/lib/whatsapp/cloud";
 
 export async function POST(
   req: NextRequest,
@@ -23,12 +24,33 @@ export async function POST(
       return NextResponse.json({ error: "Conversación no encontrada." }, { status: 404 });
     }
 
-    // 1. Guardar mensaje enviado por la persona humana del equipo
+    // 1. WhatsApp Cloud API: enviar ANTES de guardar, para no mostrar en el panel un mensaje que no salió
+    let channelMsgId: string | null = null;
+    if (conversation.channel === "whatsapp" && conversation.contact?.phone) {
+      const lastInbound = await db.message.findFirst({
+        where: { conversationId: id, sender: "client" },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+      });
+      if (!isWindowOpen(lastInbound?.createdAt)) {
+        return NextResponse.json(
+          { error: "Pasaron más de 24 h desde el último mensaje del cliente. WhatsApp solo permite escribirle con una plantilla aprobada." },
+          { status: 422 }
+        );
+      }
+      try {
+        channelMsgId = await sendWhatsAppText(conversation.contact.phone, text.trim());
+      } catch (waErr) {
+        return NextResponse.json({ error: metaErrorMessage(waErr) }, { status: 502 });
+      }
+    }
+
     const msg = await db.message.create({
       data: {
         conversationId: id,
         sender: "human",
         text: text.trim(),
+        channelMsgId,
       },
     });
 
@@ -59,21 +81,6 @@ export async function POST(
         previewText: msg.text,
       },
     });
-
-    // 2. Si el canal es WhatsApp, intentar enviar vía Baileys si el socket está activo
-    if (conversation.channel === "whatsapp" && conversation.contact?.phone) {
-      try {
-        const { getActiveWhatsAppSocket } = await import("../../../../../../worker/index");
-        const sock = getActiveWhatsAppSocket();
-        if (sock) {
-          const rawPhone = conversation.contact.phone.replace(/[^0-9]/g, "");
-          const jid = `${rawPhone}@s.whatsapp.net`;
-          await sock.sendMessage(jid, { text: text.trim() });
-        }
-      } catch (waErr) {
-        console.warn("Aviso: No se pudo despachar por WhatsApp socket:", waErr);
-      }
-    }
 
     return NextResponse.json({ success: true, message: msg });
   } catch (error) {

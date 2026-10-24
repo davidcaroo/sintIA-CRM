@@ -105,7 +105,7 @@ export default function LandingDemoPage() {
               </h1>
 
               <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto lg:mx-0 leading-relaxed">
-                El asistente virtual que una agencia instala a cada negocio local en minutos sin tocar código. Conexión nativa con <strong>WhatsApp (Baileys)</strong>, <strong>Stripe</strong>, <strong>Slack</strong> y <strong>Google Sheets</strong> adaptado a la zona horaria <em>America/Bogota</em> y moneda colombiana ($ COP).
+                El asistente virtual que una agencia instala a cada negocio local en minutos sin tocar código. Conexión nativa con <strong>WhatsApp (Cloud API)</strong>, <strong>Stripe</strong>, <strong>Slack</strong> y <strong>Google Sheets</strong> adaptado a la zona horaria <em>America/Bogota</em> y moneda colombiana ($ COP).
               </p>
 
               {/* Botones de acción principal */}
