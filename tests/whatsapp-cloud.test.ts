@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { isValidSignature, isWindowOpen, parseWebhook, toWaId, WINDOW_MS } from "../src/lib/whatsapp/cloud";
+import { describeTemplate, isValidSignature, isWindowOpen, parseWebhook, renderTemplate, toWaId, WINDOW_MS } from "../src/lib/whatsapp/cloud";
 
 const payload = {
   object: "whatsapp_business_account",
@@ -17,6 +17,8 @@ const payload = {
               { id: "wamid.2", from: "573001112233", type: "image", image: { id: "m1", caption: "mi muela" } },
               { id: "wamid.3", from: "573001112233", type: "audio", audio: { id: "m2" } },
               { id: "wamid.4", from: "573001112233", type: "interactive", interactive: { button_reply: { title: "Sí" } } },
+              { id: "wamid.5", from: "573001112233", type: "location", location: { latitude: 10.4, longitude: -75.5, name: "Bocagrande" } },
+              { id: "wamid.6", from: "573001112233", type: "document", document: { id: "m3", mime_type: "application/pdf", filename: "orden.pdf" } },
             ],
             statuses: [
               { id: "wamid.out", status: "delivered" },
@@ -29,20 +31,43 @@ const payload = {
   ],
 };
 
-test("parseWebhook extrae texto, caption, multimedia, botones y fallos", () => {
-  const { messages, failed } = parseWebhook(payload);
+test("parseWebhook extrae texto, caption, adjuntos, ubicación, botones y estados", () => {
+  const { messages, statuses } = parseWebhook(payload);
   assert.deepEqual(
-    messages.map((m) => [m.id, m.type, m.text, m.name]),
+    messages.map((m) => [m.id, m.type, m.text, m.mediaId, m.name]),
     [
-      ["wamid.1", "text", "Hola", "Ana"],
-      ["wamid.2", "image", "mi muela", "Ana"],
-      ["wamid.3", "audio", "", "Ana"],
-      ["wamid.4", "interactive", "Sí", "Ana"],
+      ["wamid.1", "text", "Hola", null, "Ana"],
+      ["wamid.2", "image", "mi muela", "m1", "Ana"],
+      ["wamid.3", "audio", "", "m2", "Ana"],
+      ["wamid.4", "interactive", "Sí", null, "Ana"],
+      ["wamid.5", "location", "📍 Ubicación compartida: Bocagrande\nhttps://maps.google.com/?q=10.4,-75.5", null, "Ana"],
+      ["wamid.6", "document", "", "m3", "Ana"],
     ]
   );
-  assert.equal(failed.length, 1);
-  assert.equal(failed[0].error, "131047 Re-engagement message");
-  assert.deepEqual(parseWebhook({}), { messages: [], failed: [] });
+  assert.equal(messages[5].filename, "orden.pdf");
+  assert.equal(messages[5].mime, "application/pdf");
+  assert.deepEqual(
+    statuses.map((s) => [s.id, s.status, s.error]),
+    [
+      ["wamid.out", "delivered", null],
+      ["wamid.bad", "failed", "131047 Re-engagement message"],
+    ]
+  );
+  assert.deepEqual(parseWebhook({}), { messages: [], statuses: [] });
+});
+
+test("plantillas: variables, soporte y render", () => {
+  const t = describeTemplate({
+    name: "recordatorio",
+    language: "es",
+    category: "UTILITY",
+    components: [{ type: "BODY", text: "Hola {{1}}, tu cita de {{2}} es a las {{3}}. {{1}}" }],
+  });
+  assert.equal(t.params, 3);
+  assert.equal(t.supported, true);
+  assert.equal(renderTemplate(t.body, ["Ana", "limpieza", "10:00"]), "Hola Ana, tu cita de limpieza es a las 10:00. Ana");
+  const withImage = describeTemplate({ name: "promo", language: "es", components: [{ type: "HEADER", format: "IMAGE" }, { type: "BODY", text: "Hola" }] });
+  assert.equal(withImage.supported, false);
 });
 
 test("isValidSignature valida HMAC-SHA256 del body crudo", () => {

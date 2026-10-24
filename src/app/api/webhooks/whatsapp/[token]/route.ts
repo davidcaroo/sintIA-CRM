@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { isValidSignature, parseWebhook, safeEqual, webhookVerifyToken } from "@/lib/whatsapp/cloud";
+import { isValidSignature, parseWebhook, safeEqual, STATUS_RANK, webhookVerifyToken } from "@/lib/whatsapp/cloud";
 
 /**
  * Webhook público de WhatsApp Cloud API.
@@ -40,23 +40,32 @@ export async function POST(req: Request, { params }: Params) {
     return Response.json({ received: true }); // ilegible: 200 para que Meta no reintente basura
   }
 
-  const { messages, failed } = parseWebhook(payload);
+  const { messages, statuses } = parseWebhook(payload);
 
   try {
     if (messages.length) {
       await db.whatsAppInbound.createMany({ data: messages, skipDuplicates: true });
     }
-    if (failed.length) {
-      await db.activityLog.createMany({
-        data: failed.map((f) => ({
-          action: "whatsapp_send_failed",
-          channel: "whatsapp",
-          details: `Meta no entregó un mensaje a +${f.recipient}.`,
-          status: "error",
-          error: f.error,
-          metadata: { wamid: f.id },
-        })),
+
+    // Estados de los mensajes salientes: solo avanzan (sent → delivered → read); failed siempre gana
+    for (const st of statuses) {
+      const lower = Object.keys(STATUS_RANK).filter((k) => STATUS_RANK[k] < STATUS_RANK[st.status]);
+      const { count } = await db.message.updateMany({
+        where: { channelMsgId: st.id, OR: [{ status: null }, { status: { in: lower } }] },
+        data: { status: st.status, ...(st.status === "failed" ? { error: st.error } : {}) },
       });
+      if (st.status === "failed" && count > 0) {
+        await db.activityLog.create({
+          data: {
+            action: "whatsapp_send_failed",
+            channel: "whatsapp",
+            details: `Meta no entregó un mensaje a +${st.recipient}.`,
+            status: "error",
+            error: st.error,
+            metadata: { wamid: st.id },
+          },
+        });
+      }
     }
   } catch (err) {
     console.error("[webhook-whatsapp] no se pudo guardar el evento; 503 para que Meta reintente:", err);

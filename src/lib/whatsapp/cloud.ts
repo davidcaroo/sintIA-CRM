@@ -90,7 +90,7 @@ export const toWaId = (phone: string) => phone.replace(/\D/g, "");
 /** Envía texto libre. Devuelve el wamid del mensaje saliente. */
 export async function sendWhatsAppText(to: string, text: string, creds?: WhatsAppCreds | null): Promise<string | null> {
   const c = creds ?? (await getWhatsAppCreds());
-  if (!c) throw new Error("WhatsApp no está conectado.");
+  if (!c) throw new Error("WhatsApp no está conectado: conecta tu número de Meta en Canales para responder por WhatsApp.");
   const res = await graphRequest<{ messages?: { id: string }[] }>(`${c.phoneNumberId}/messages`, {
     method: "POST",
     token: c.token,
@@ -108,7 +108,7 @@ export async function sendWhatsAppTemplate(
   creds?: WhatsAppCreds | null
 ): Promise<string | null> {
   const c = creds ?? (await getWhatsAppCreds());
-  if (!c) throw new Error("WhatsApp no está conectado.");
+  if (!c) throw new Error("WhatsApp no está conectado: conecta tu número de Meta en Canales para responder por WhatsApp.");
   const res = await graphRequest<{ messages?: { id: string }[] }>(`${c.phoneNumberId}/messages`, {
     method: "POST",
     token: c.token,
@@ -228,24 +228,48 @@ export function isValidSignature(rawBody: string, header: string | null, appSecr
 
 /* ---------------- Parseo del payload ---------------- */
 
+export const MEDIA_TYPES = ["image", "audio", "video", "document", "sticker"] as const;
+
 export interface InboundMessage {
   id: string; // wamid
   waId: string;
   name: string | null;
   type: string;
   text: string;
+  mediaId: string | null;
+  mime: string | null;
+  filename: string | null;
 }
 
-export interface FailedStatus {
-  id: string;
+export interface StatusUpdate {
+  id: string; // wamid del mensaje saliente
+  status: "sent" | "delivered" | "read" | "failed";
   recipient: string;
-  error: string;
+  error: string | null;
 }
 
-/** Extrae mensajes entrantes y estados fallidos del payload de webhook de Meta. */
-export function parseWebhook(payload: any): { messages: InboundMessage[]; failed: FailedStatus[] } {
+function textOf(m: any): string {
+  if (m.text?.body) return m.text.body;
+  if (m.button?.text) return m.button.text;
+  if (m.interactive?.button_reply?.title) return m.interactive.button_reply.title;
+  if (m.interactive?.list_reply?.title) return m.interactive.list_reply.title;
+  if (m.type === "location" && m.location) {
+    const l = m.location;
+    return [`📍 Ubicación compartida: ${l.name ?? ""} ${l.address ?? ""}`.trim(), `https://maps.google.com/?q=${l.latitude},${l.longitude}`].join("\n");
+  }
+  if (m.type === "contacts" && Array.isArray(m.contacts)) {
+    return m.contacts
+      .map((c: any) => `👤 Contacto compartido: ${c.name?.formatted_name ?? ""} ${(c.phones ?? []).map((p: any) => p.phone).join(", ")}`.trim())
+      .join("\n");
+  }
+  if (m.type === "reaction") return "";
+  return m[m.type]?.caption ?? "";
+}
+
+/** Extrae mensajes entrantes y estados de los salientes del payload de webhook de Meta. */
+export function parseWebhook(payload: any): { messages: InboundMessage[]; statuses: StatusUpdate[] } {
   const messages: InboundMessage[] = [];
-  const failed: FailedStatus[] = [];
+  const statuses: StatusUpdate[] = [];
   for (const entry of payload?.entry ?? []) {
     for (const change of entry?.changes ?? []) {
       if (change?.field !== "messages") continue;
@@ -255,21 +279,100 @@ export function parseWebhook(payload: any): { messages: InboundMessage[]; failed
 
       for (const m of v.messages ?? []) {
         if (!m?.id || !m?.from) continue;
-        const text =
-          m.text?.body ??
-          m.button?.text ??
-          m.interactive?.button_reply?.title ??
-          m.interactive?.list_reply?.title ??
-          m[m.type]?.caption ??
-          "";
-        messages.push({ id: m.id, waId: m.from, name: names.get(m.from) ?? null, type: m.type ?? "unknown", text });
+        const media = (MEDIA_TYPES as readonly string[]).includes(m.type) ? m[m.type] : null;
+        messages.push({
+          id: m.id,
+          waId: m.from,
+          name: names.get(m.from) ?? null,
+          type: m.type ?? "unknown",
+          text: textOf(m),
+          mediaId: media?.id ?? null,
+          mime: media?.mime_type ?? null,
+          filename: media?.filename ?? null,
+        });
       }
       for (const s of v.statuses ?? []) {
-        if (s?.status !== "failed") continue;
+        if (!s?.id || !["sent", "delivered", "read", "failed"].includes(s.status)) continue;
         const e = s.errors?.[0];
-        failed.push({ id: s.id, recipient: s.recipient_id ?? "", error: e ? `${e.code} ${e.title ?? e.message ?? ""}`.trim() : "desconocido" });
+        statuses.push({
+          id: s.id,
+          status: s.status,
+          recipient: s.recipient_id ?? "",
+          error: e ? `${e.code} ${e.error_data?.details ?? e.title ?? e.message ?? ""}`.trim() : null,
+        });
       }
     }
   }
-  return { messages, failed };
+  return { messages, statuses };
+}
+
+/** Orden de los estados: un "delivered" tardío no debe pisar un "read". */
+export const STATUS_RANK: Record<string, number> = { sent: 1, delivered: 2, read: 3, failed: 4 };
+
+/* ---------------- Adjuntos ---------------- */
+
+export const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
+
+/** Descarga un adjunto de Meta (el id dura ~30 días; la URL firmada, minutos). */
+export async function downloadMedia(mediaId: string, creds?: WhatsAppCreds | null): Promise<{ data: Buffer; mime: string }> {
+  const c = creds ?? (await getWhatsAppCreds());
+  if (!c) throw new Error("WhatsApp no está conectado: conecta tu número de Meta en Canales para responder por WhatsApp.");
+  const meta = await graphRequest<{ url: string; mime_type: string; file_size?: number }>(mediaId, { token: c.token });
+  if (meta.file_size && meta.file_size > MAX_MEDIA_BYTES) throw new Error("El archivo supera 20 MB.");
+  const res = await fetch(meta.url, { headers: { Authorization: `Bearer ${c.token}` }, signal: AbortSignal.timeout(30000) });
+  if (!res.ok) throw new MetaApiError(`No se pudo descargar el adjunto (${res.status})`, res.status);
+  const data = Buffer.from(await res.arrayBuffer());
+  if (data.length > MAX_MEDIA_BYTES) throw new Error("El archivo supera 20 MB.");
+  return { data, mime: meta.mime_type || res.headers.get("content-type") || "application/octet-stream" };
+}
+
+/* ---------------- Plantillas ---------------- */
+
+export interface TemplateInfo {
+  name: string;
+  language: string;
+  category: string;
+  body: string;
+  /** Número de variables {{n}} del cuerpo. */
+  params: number;
+  /** false si exige variables de encabezado o botones que el panel aún no rellena. */
+  supported: boolean;
+}
+
+export function describeTemplate(t: any): TemplateInfo {
+  const comps: any[] = t.components ?? [];
+  const body = comps.find((c) => c.type === "BODY")?.text ?? "";
+  const header = comps.find((c) => c.type === "HEADER");
+  const buttons = comps.find((c) => c.type === "BUTTONS")?.buttons ?? [];
+  const params = new Set((body.match(/\{\{\s*(\d+)\s*\}\}/g) ?? []).map((x: string) => x.replace(/\D/g, ""))).size;
+  const headerNeedsInput = header && (header.format !== "TEXT" || /\{\{/.test(header.text ?? ""));
+  const buttonNeedsInput = buttons.some((b: any) => /\{\{/.test(b.url ?? "") || b.type === "COPY_CODE" || b.type === "FLOW");
+  return {
+    name: t.name,
+    language: t.language,
+    category: t.category ?? "",
+    body,
+    params,
+    supported: !headerNeedsInput && !buttonNeedsInput,
+  };
+}
+
+/** Plantillas APROBADAS de la WABA, en vivo desde Meta. */
+export async function listApprovedTemplates(creds?: WhatsAppCreds | null): Promise<TemplateInfo[]> {
+  const c = creds ?? (await getWhatsAppCreds());
+  if (!c) throw new Error("WhatsApp no está conectado: conecta tu número de Meta en Canales para responder por WhatsApp.");
+  const out: TemplateInfo[] = [];
+  let path: string | null = `${c.wabaId}/message_templates?fields=name,language,status,category,components&status=APPROVED&limit=100`;
+  for (let page = 0; path && page < 10; page++) {
+    const res: any = await graphRequest(path, { token: c.token });
+    for (const t of res.data ?? []) if (t.status === "APPROVED") out.push(describeTemplate(t));
+    const next: string | undefined = res.paging?.next;
+    path = next ? next.replace(/^https:\/\/graph\.facebook\.com\/v[\d.]+\//, "") : null;
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Rellena {{1}}, {{2}}… con los valores, para guardar en la bandeja lo que vio el cliente. */
+export function renderTemplate(body: string, values: string[]): string {
+  return body.replace(/\{\{\s*(\d+)\s*\}\}/g, (m, n) => values[Number(n) - 1] ?? m);
 }

@@ -1,33 +1,30 @@
 import { db } from "../src/lib/db";
 import { runAssistantConversation } from "../src/lib/ai/openrouter";
 import { emitEvent } from "../src/lib/events/bus";
-import { getWhatsAppCreds, markReadAndTyping, metaErrorMessage, sendWhatsAppText } from "../src/lib/whatsapp/cloud";
+import { getWhatsAppCreds, markReadAndTyping, metaErrorMessage, sendWhatsAppText, type WhatsAppCreds } from "../src/lib/whatsapp/cloud";
+import { describeInbound, type InboundRow } from "../src/lib/whatsapp/media-ai";
 
 /**
  * Worker de WhatsApp Cloud API.
  * El webhook (proceso web) guarda cada mensaje en WhatsAppInbound; aquí se leen,
- * se agrupan por cliente con un debounce y se responde con la IA.
+ * se agrupan por cliente con un debounce, se convierten los adjuntos en texto
+ * (transcripción, descripción, resumen) y se responde con la IA.
  * Un mensaje solo se marca procesado cuando su ráfaga terminó: si el worker se
  * reinicia a mitad, se vuelve a procesar al arrancar.
  */
 
 const POLL_MS = 1000;
 const DEBOUNCE_DELAY_MS = 3500; // silencio que se espera antes de responder a una ráfaga
+const MEDIA_DEBOUNCE_MS = 6000; // tras un adjunto se espera algo más: suele llegar texto detrás
 
-const MEDIA_NOTICE =
-  "He recibido tu archivo, pero por el momento solo puedo leer mensajes de texto. Por favor, escríbeme lo que necesitas para poder atenderte enseguida.";
-
-interface Buffer {
+interface Burst {
   waId: string;
   name: string | null;
-  ids: string[];
-  texts: string[];
-  lastWamid: string;
-  hasMedia: boolean;
+  rows: InboundRow[];
   timer: NodeJS.Timeout;
 }
 
-const buffers = new Map<string, Buffer>();
+const bursts = new Map<string, Burst>();
 const inFlight = new Set<string>();
 let polling = false;
 
@@ -47,33 +44,20 @@ async function poll() {
     });
     for (const row of rows) {
       inFlight.add(row.id);
-      const isMedia = !row.text.trim() && row.type !== "text";
-      const text = row.text.trim() || (isMedia ? `[Archivo multimedia: ${row.type}]` : "");
-      if (!text) {
-        await finish([row.id]);
+      if (!row.text.trim() && !row.mediaId) {
+        await finish([row.id]); // reacciones, mensajes no soportados
         continue;
       }
-      console.log(`💬 [WhatsApp-Worker] Mensaje de +${row.waId}: "${text}"`);
-
-      const item = buffers.get(row.waId);
-      if (item) {
-        clearTimeout(item.timer);
-        item.ids.push(row.id);
-        item.texts.push(text);
-        item.lastWamid = row.id;
-        item.hasMedia ||= isMedia;
-        item.name = row.name ?? item.name;
-        item.timer = setTimeout(() => flush(row.waId), DEBOUNCE_DELAY_MS);
+      console.log(`💬 [WhatsApp-Worker] ${row.type} de +${row.waId}${row.text ? `: "${row.text}"` : ""}`);
+      const delay = row.mediaId ? MEDIA_DEBOUNCE_MS : DEBOUNCE_DELAY_MS;
+      const burst = bursts.get(row.waId);
+      if (burst) {
+        clearTimeout(burst.timer);
+        burst.rows.push(row);
+        burst.name = row.name ?? burst.name;
+        burst.timer = setTimeout(() => flush(row.waId), delay);
       } else {
-        buffers.set(row.waId, {
-          waId: row.waId,
-          name: row.name,
-          ids: [row.id],
-          texts: [text],
-          lastWamid: row.id,
-          hasMedia: isMedia,
-          timer: setTimeout(() => flush(row.waId), DEBOUNCE_DELAY_MS),
-        });
+        bursts.set(row.waId, { waId: row.waId, name: row.name, rows: [row], timer: setTimeout(() => flush(row.waId), delay) });
       }
     }
   } catch (err) {
@@ -92,15 +76,15 @@ async function finish(ids: string[]) {
 }
 
 async function flush(waId: string) {
-  const item = buffers.get(waId);
-  if (!item) return;
-  buffers.delete(waId);
+  const burst = bursts.get(waId);
+  if (!burst) return;
+  bursts.delete(waId);
   try {
-    await processBurst(item);
+    await processBurst(burst);
   } catch (err) {
     console.error(`❌ [WhatsApp-Worker] Error procesando ráfaga de +${waId}:`, err);
   } finally {
-    await finish(item.ids);
+    await finish(burst.rows.map((r) => r.id));
   }
 }
 
@@ -115,20 +99,17 @@ function emitMessage(conversationId: string, msg: { id: string; sender: string; 
   });
 }
 
-async function processBurst(item: Buffer) {
-  const phone = `+${item.waId}`;
-  const combinedText = item.texts.join("\n");
-  console.log(`⏳ [WhatsApp-Worker] Procesando ráfaga de ${phone} (${item.texts.length} msgs)`);
-
+async function processBurst(burst: Burst) {
+  const phone = `+${burst.waId}`;
   const creds = await getWhatsAppCreds();
+  const lastWamid = burst.rows[burst.rows.length - 1].id;
 
-  // 1. Contacto y conversación (siempre se guarda lo que escribió el cliente)
+  // 1. Contacto y conversación
   const contact = await db.contact.upsert({
     where: { phone },
-    update: item.name ? { name: item.name } : {},
-    create: { phone, name: item.name || "Cliente WhatsApp", channel: "whatsapp" },
+    update: burst.name ? { name: burst.name } : {},
+    create: { phone, name: burst.name || "Cliente WhatsApp", channel: "whatsapp" },
   });
-
   let conversation = await db.conversation.findFirst({
     where: { contactId: contact.id, channel: "whatsapp", status: { not: "closed" } },
     orderBy: { updatedAt: "desc" },
@@ -139,50 +120,50 @@ async function processBurst(item: Buffer) {
     });
   }
 
-  // Historial: los ÚLTIMOS 10 mensajes, en orden cronológico
+  // Historial previo: los ÚLTIMOS 10 mensajes, en orden cronológico
   const history = (
-    await db.message.findMany({
-      where: { conversationId: conversation.id },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    })
+    await db.message.findMany({ where: { conversationId: conversation.id }, orderBy: { createdAt: "desc" }, take: 10 })
   )
     .reverse()
     .map((m) => ({ sender: m.sender, text: m.text }));
 
-  const clientMsg = await db.message.create({
-    data: { conversationId: conversation.id, sender: "client", text: combinedText, channelMsgId: item.lastWamid },
-  });
-  await db.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });
-  emitMessage(conversation.id, clientMsg);
-
-  // 2. ¿Debe responder el bot?
   const config = await db.assistantConfig.findFirst();
-  if (config && !config.isActive) {
-    console.log("⏸️ [WhatsApp-Worker] Asistente en pausa general. Mensaje guardado sin respuesta.");
-    return;
-  }
-  if (conversation.status === "human_handoff") {
-    console.log(`👤 [WhatsApp-Worker] Conversación de ${phone} en mano humana. Bot silenciado.`);
-    return;
-  }
-  if (!creds) {
-    console.warn("⚠️ [WhatsApp-Worker] WhatsApp no está conectado: no se puede responder.");
-    return;
-  }
+  const botWillReply = !(config && !config.isActive) && conversation.status !== "human_handoff" && !!creds;
 
-  // 3. Leído + "escribiendo…" nativo de la Cloud API
-  await markReadAndTyping(item.lastWamid, creds);
+  // "Leído + escribiendo…" mientras se transcriben adjuntos y piensa la IA
+  if (botWillReply) await markReadAndTyping(lastWamid, creds);
 
-  // 4. Solo multimedia: aviso amable, sin pasar a humano (el bot sigue atendiendo)
-  const onlyMedia = item.hasMedia && item.texts.every((t) => t.startsWith("[Archivo multimedia"));
-  if (onlyMedia) {
-    await sendAndStore(conversation.id, phone, MEDIA_NOTICE, creds);
-    return;
+  // 2. Adjuntos → texto (en paralelo). Se procesan aunque responda una persona: así lo lee el equipo.
+  const described = await Promise.all(burst.rows.map((r) => describeInbound(r, creds)));
+
+  // 3. Un mensaje en la bandeja por cada entrada del cliente
+  for (let i = 0; i < burst.rows.length; i++) {
+    const row = burst.rows[i];
+    const msg = await db.message.create({
+      data: {
+        conversationId: conversation.id,
+        sender: "client",
+        text: described[i].display || row.text || `[${row.type}]`,
+        channelMsgId: row.id,
+        mediaType: row.mediaId ? row.type : null,
+        mediaId: row.mediaId,
+        mediaMime: row.mime,
+      },
+    });
+    emitMessage(conversation.id, msg);
   }
+  await db.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });
+
+  // 4. ¿Debe responder el bot?
+  if (config && !config.isActive) return console.log("⏸️ [WhatsApp-Worker] Asistente en pausa general. Mensaje guardado sin respuesta.");
+  if (conversation.status === "human_handoff") return console.log(`👤 [WhatsApp-Worker] ${phone} en mano humana. Bot silenciado.`);
+  if (!creds) return console.warn("⚠️ [WhatsApp-Worker] WhatsApp no está conectado: no se puede responder.");
+
+  const forAi = described.map((d) => d.forAi).filter(Boolean).join("\n");
+  if (!forAi) return; // solo stickers o reacciones: no hace falta contestar
 
   // 5. IA
-  const aiResponse = await runAssistantConversation(combinedText, history, {
+  const aiResponse = await runAssistantConversation(forAi, history, {
     isSafeMode: false,
     customerName: contact.name || undefined,
     customerPhone: contact.phone || undefined,
@@ -202,20 +183,21 @@ async function processBurst(item: Buffer) {
   }
 }
 
-async function sendAndStore(conversationId: string, phone: string, text: string, creds: any, toolsUsed?: any) {
+async function sendAndStore(conversationId: string, phone: string, text: string, creds: WhatsAppCreds, toolsUsed?: any) {
   let channelMsgId: string | null = null;
+  let error: string | null = null;
   try {
     channelMsgId = await sendWhatsAppText(phone, text, creds);
   } catch (err) {
-    const message = metaErrorMessage(err);
-    console.error(`❌ [WhatsApp-Worker] Meta rechazó la respuesta a ${phone}: ${message}`);
+    error = metaErrorMessage(err);
+    console.error(`❌ [WhatsApp-Worker] Meta rechazó la respuesta a ${phone}: ${error}`);
     await db.activityLog.create({
-      data: { action: "whatsapp_send_failed", channel: "whatsapp", details: `No se pudo responder a ${phone}.`, status: "error", error: message },
+      data: { action: "whatsapp_send_failed", channel: "whatsapp", details: `No se pudo responder a ${phone}.`, status: "error", error },
     });
-    return;
   }
+  // Se guarda también si falló, marcado como fallido: el equipo ve qué no le llegó al cliente
   const msg = await db.message.create({
-    data: { conversationId, sender: "assistant", text, toolsUsed, channelMsgId },
+    data: { conversationId, sender: "assistant", text, toolsUsed, channelMsgId, status: error ? "failed" : "sent", error },
   });
   emitMessage(conversationId, msg);
 }

@@ -149,7 +149,16 @@ model Message {
   text           String       @db.Text
   toolsUsed      Json?
   channelMsgId   String?
+  // WhatsApp: estado del saliente (sent, delivered, read, failed) y motivo si falló
+  status         String?
+  error          String?
+  // Adjunto entrante: tipo (image, audio, video, document, sticker), id de Meta y mime
+  mediaType      String?
+  mediaId        String?
+  mediaMime      String?
   createdAt      DateTime     @default(now())
+
+  @@index([channelMsgId])
 }
 
 model Appointment {
@@ -188,6 +197,9 @@ model WhatsAppInbound {
   name        String?
   type        String
   text        String    @db.Text
+  mediaId     String?
+  mime        String?
+  filename    String?
   processedAt DateTime?
   createdAt   DateTime  @default(now())
 

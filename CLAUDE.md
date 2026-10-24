@@ -49,6 +49,7 @@ npm run build
 npx tsx tests/events-bus.test.ts
 npx tsx tests/lab-judge.test.ts
 npx tsx tests/whatsapp-cloud.test.ts
+npx tsx tests/web-extract.test.ts
 ```
 
 ---
@@ -63,6 +64,8 @@ npx tsx tests/whatsapp-cloud.test.ts
 3. **WhatsApp Cloud API (Meta):**
    - El token de Meta se guarda cifrado en `ChannelState.encryptedCredentials`; WABA ID, Phone Number ID y plantilla de recordatorio en `ChannelState.config`.
    - Define `META_APP_SECRET` en producción para verificar la firma de cada webhook. `APP_URL` debe ser pública con HTTPS.
+   - Adjuntos entrantes (audio, imagen, PDF, video) se convierten en texto con [`src/lib/whatsapp/media-ai.ts`](src/lib/whatsapp/media-ai.ts) vía [`src/lib/ai/llm.ts`](src/lib/ai/llm.ts) (Gemini directo u OpenRouter). El panel los sirve con `/api/whatsapp/media/[id]`, solo con sesión y solo tipos seguros en línea.
+   - Estados de salientes (`Message.status`: sent → delivered → read, o failed) los actualiza el webhook y nunca retroceden.
 
 ---
 

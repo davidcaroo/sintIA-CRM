@@ -41,7 +41,7 @@ export async function POST(
       try {
         channelMsgId = await sendWhatsAppText(conversation.contact.phone, text.trim());
       } catch (waErr) {
-        return NextResponse.json({ error: metaErrorMessage(waErr) }, { status: 502 });
+        return NextResponse.json({ error: metaErrorMessage(waErr) }, { status: 422 });
       }
     }
 
@@ -51,6 +51,7 @@ export async function POST(
         sender: "human",
         text: text.trim(),
         channelMsgId,
+        status: channelMsgId ? "sent" : null,
       },
     });
 
