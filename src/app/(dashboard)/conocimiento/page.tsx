@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { toast } from "@/components/ui/Toast";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Building,
   Plus,
@@ -141,12 +143,21 @@ export default function ConocimientoPage() {
   };
 
   const handleDeleteService = async (id: string) => {
-    if (!confirm("¿Seguro que deseas eliminar este servicio?")) return;
+    const ok = await confirmDialog({
+      title: "¿Eliminar servicio?",
+      description: "Esta acción no se puede deshacer. El asistente ya no ofrecerá este servicio.",
+      confirmText: "Eliminar",
+      destructive: true,
+    });
+    if (!ok) return;
+
     try {
       await fetch(`/api/knowledge/services/${id}`, { method: "DELETE" });
+      toast.success("Servicio eliminado", "La base de datos de servicios ha sido actualizada.");
       loadData();
     } catch (e) {
       console.error(e);
+      toast.error("Error", "No se pudo eliminar el servicio.");
     }
   };
 
@@ -178,12 +189,21 @@ export default function ConocimientoPage() {
   };
 
   const handleDeleteFaq = async (id: string) => {
-    if (!confirm("¿Seguro que deseas eliminar esta pregunta frecuente?")) return;
+    const ok = await confirmDialog({
+      title: "¿Eliminar pregunta frecuente?",
+      description: "Esta acción no se puede deshacer. El asistente ya no responderá con esta información.",
+      confirmText: "Eliminar",
+      destructive: true,
+    });
+    if (!ok) return;
+
     try {
       await fetch(`/api/knowledge/faqs/${id}`, { method: "DELETE" });
+      toast.success("Pregunta eliminada", "Se ha removido de la base de conocimiento.");
       loadData();
     } catch (e) {
       console.error(e);
+      toast.error("Error", "No se pudo eliminar la pregunta frecuente.");
     }
   };
 

@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { toast } from "@/components/ui/Toast";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Calendar,
   Mail,
@@ -41,6 +43,13 @@ export default function IntegracionesPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [showGoogleGuide, setShowGoogleGuide] = useState(false);
 
+  // Estados de conexión rápida de Google
+  const [googleConnectModalService, setGoogleConnectModalService] = useState<string | null>(null);
+  const [googleCustomEmail, setGoogleCustomEmail] = useState("");
+  const [googleClientId, setGoogleClientId] = useState("");
+  const [googleClientSecret, setGoogleClientSecret] = useState("");
+  const [googleTab, setGoogleTab] = useState<"quick" | "oauth">("quick");
+
   const loadIntegrations = () => {
     fetch("/api/integrations")
       .then((res) => res.json())
@@ -63,8 +72,15 @@ export default function IntegracionesPage() {
   };
 
   const handleDisconnect = async (id: string) => {
-    if (!confirm(`¿Estás seguro de desconectar ${id}?`)) return;
+    const ok = await confirmDialog({
+      title: "¿Desconectar integración?",
+      description: `¿Estás seguro de que deseas desconectar ${id}? Se detendrá la sincronización automática.`,
+      confirmText: "Desconectar",
+      destructive: true,
+    });
+    if (!ok) return;
     await fetch(`/api/integrations/${id}/disconnect`, { method: "POST" });
+    toast.success("Integración desconectada", `Se ha desconectado ${id} con éxito.`);
     loadIntegrations();
   };
 
@@ -73,10 +89,54 @@ export default function IntegracionesPage() {
     try {
       const res = await fetch(`/api/integrations/google/auth-url?service=${id}`);
       const data = await res.json();
+      if (res.ok && data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      setGoogleConnectModalService(id);
+    } catch {
+      setGoogleConnectModalService(id);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleQuickConnect = async (service: string) => {
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/integrations/google/quick-connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ service, email: googleCustomEmail.trim() || undefined }),
+      });
+      const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      window.location.href = data.url;
+      setGoogleConnectModalService(null);
+      toast.success("¡Integración conectada!", data.message || "Google Calendar conectado.");
+      loadIntegrations();
     } catch (err: any) {
-      alert(`Error al iniciar OAuth con Google: ${err.message}\nVerifica GOOGLE_CLIENT_ID en .env.`);
+      toast.error("Error al conectar", err.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSaveGoogleCredentials = async (service: string) => {
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/integrations/google/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: googleClientId, clientSecret: googleClientSecret, service }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      if (data.authUrl) {
+        window.location.href = data.authUrl;
+      }
+    } catch (err: any) {
+      toast.error("Error al guardar credenciales", err.message);
+    } finally {
       setActionLoading(false);
     }
   };
@@ -712,6 +772,157 @@ export default function IntegracionesPage() {
           </div>
         </div>
       )}
+      {/* MODAL DE CONEXIÓN FÁCIL PARA GOOGLE (CALENDAR, GMAIL, SHEETS) */}
+      {googleConnectModalService && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/75 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 dark:border-slate-800 p-6 space-y-5 transition-colors">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                {getIntegrationIcon(googleConnectModalService)}
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    Conectar {googleConnectModalService === "google_calendar" ? "Google Calendar" : googleConnectModalService === "google_gmail" ? "Gmail" : "Google Sheets"}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Vincular cuenta para agendamiento y sincronización de citas
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setGoogleConnectModalService(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Selector de modo: 1 Clic vs Google Cloud */}
+            <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setGoogleTab("quick")}
+                className={`flex-1 py-1.5 rounded-lg font-semibold transition ${
+                  googleTab === "quick"
+                    ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                }`}
+              >
+                ⚡ Conexión Directa en 1 Clic
+              </button>
+              <button
+                type="button"
+                onClick={() => setGoogleTab("oauth")}
+                className={`flex-1 py-1.5 rounded-lg font-semibold transition ${
+                  googleTab === "oauth"
+                    ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                }`}
+              >
+                🔑 Cuenta Google Cloud (OAuth)
+              </button>
+            </div>
+
+            {googleTab === "quick" ? (
+              <div className="space-y-4 text-xs">
+                <div className="p-3.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 text-indigo-900 dark:text-indigo-200">
+                  <p className="font-semibold text-xs mb-1">Conexión Inmediata Automatizada</p>
+                  <p className="text-[11px] leading-relaxed">
+                    Sintia conecta la agenda y activa todas las herramientas del agente (consulta de huecos libres, reservas de citas y confirmaciones) sin necesidad de configurar Google Cloud manualmente.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                    Correo de Google vinculado
+                  </label>
+                  <input
+                    type="email"
+                    value={googleCustomEmail}
+                    onChange={(e) => setGoogleCustomEmail(e.target.value)}
+                    placeholder="contacto@innovacode.click o tu-correo@gmail.com"
+                    className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Las citas se asignarán a esta cuenta y el asistente las sincronizará automáticamente.
+                  </p>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setGoogleConnectModalService(null)}
+                    className="px-4 py-2 rounded-xl text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickConnect(googleConnectModalService)}
+                    disabled={actionLoading}
+                    className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-500/20 disabled:opacity-60 transition flex items-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{actionLoading ? "Conectando..." : "Conectar al Instante"}</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 text-xs">
+                <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-[11px]">
+                  Si ya tienes un proyecto en Google Cloud Console con pantalla de consentimiento OAuth, pega aquí tu Client ID y Secret para que Google muestre la pantalla oficial de selección de cuentas:
+                </p>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
+                      Client ID de Google Cloud
+                    </label>
+                    <input
+                      type="text"
+                      value={googleClientId}
+                      onChange={(e) => setGoogleClientId(e.target.value)}
+                      placeholder="xxxx.apps.googleusercontent.com"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
+                      Client Secret de Google Cloud
+                    </label>
+                    <input
+                      type="password"
+                      value={googleClientSecret}
+                      onChange={(e) => setGoogleClientSecret(e.target.value)}
+                      placeholder="GOCSPX-xxxxxxxxxxxxxx"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setGoogleConnectModalService(null)}
+                    className="px-4 py-2 rounded-xl text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveGoogleCredentials(googleConnectModalService)}
+                    disabled={actionLoading || !googleClientId || !googleClientSecret}
+                    className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-500/20 disabled:opacity-60 transition flex items-center gap-2"
+                  >
+                    <span>{actionLoading ? "Guardando..." : "Guardar y Abrir Google"}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

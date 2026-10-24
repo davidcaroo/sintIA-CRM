@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { toast } from "@/components/ui/Toast";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Smartphone,
   Globe,
@@ -119,12 +121,21 @@ export default function CanalesPage() {
   }, []);
 
   const handleDisconnectWhatsApp = async () => {
-    if (!confirm("¿Deseas desconectar la sesión actual de WhatsApp?")) return;
+    const ok = await confirmDialog({
+      title: "¿Desconectar WhatsApp?",
+      description: "¿Deseas cerrar la sesión activa de WhatsApp? El bot dejará de responder mensajes en este número.",
+      confirmText: "Desconectar",
+      destructive: true,
+    });
+    if (!ok) return;
+
     setWaDisconnecting(true);
     try {
       await fetch("/api/channels/whatsapp/disconnect", { method: "POST" });
+      toast.info("WhatsApp desconectado", "La sesión se ha cerrado correctamente.");
     } catch (err) {
       console.error(err);
+      toast.error("Error", "No se pudo desconectar WhatsApp.");
     } finally {
       setWaDisconnecting(false);
     }

@@ -287,11 +287,11 @@ export default function ConversacionesPage() {
   const countHandoff = conversations.filter((c) => c.status === "human_handoff").length;
 
   return (
-    <div className="transition-colors max-w-7xl mx-auto pb-4">
-      {/* Contenedor Principal de Dos Columnas */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden h-[calc(100vh-7.5rem)] min-h-[580px]">
+    <div className="h-full min-h-0 flex-1 flex flex-col transition-colors">
+      {/* Contenedor Principal de Dos Columnas estilo Vocero */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden flex-1 h-full min-h-0">
         {/* COLUMNA IZQUIERDA: LISTA Y FILTROS ESTILO VOCERO (5 cols) */}
-        <div className="lg:col-span-5 border-r border-slate-200/80 dark:border-slate-800 flex flex-col h-full bg-slate-50/50 dark:bg-slate-950/40">
+        <div className="lg:col-span-5 border-r border-slate-200/80 dark:border-slate-800 flex flex-col h-full min-h-0 overflow-hidden bg-slate-50/50 dark:bg-slate-950/40">
           {/* Buscador */}
           <div className="p-3 border-b border-slate-200/70 dark:border-slate-800/80 bg-white dark:bg-slate-900">
             <div className="relative">
@@ -345,8 +345,8 @@ export default function ConversacionesPage() {
             })}
           </div>
 
-          {/* Lista de Conversaciones */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
+          {/* Lista de Conversaciones con scroll interno */}
+          <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
             {loading ? (
               <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500">
                 Sincronizando bandeja...
@@ -435,11 +435,11 @@ export default function ConversacionesPage() {
         </div>
 
         {/* COLUMNA DERECHA: CONVERSACIÓN ABIERTA (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col h-full bg-slate-50/30 dark:bg-slate-900/40 transition-colors">
+        <div className="lg:col-span-7 flex flex-col h-full min-h-0 overflow-hidden bg-slate-50/30 dark:bg-slate-900/40 transition-colors">
           {activeConv ? (
             <>
               {/* Cabecera del chat activo estilo Vocero */}
-              <div className="p-3.5 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 bg-white dark:bg-slate-900">
+              <div className="p-3.5 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 bg-white dark:bg-slate-900 shrink-0">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold flex items-center justify-center uppercase text-xs border border-slate-200 dark:border-slate-700 shrink-0">
                     {(activeConv.contact?.name || "C").slice(0, 2)}
@@ -504,7 +504,7 @@ export default function ConversacionesPage() {
 
               {/* Banner de Silencio Asistente si está en mano humana */}
               {activeConv.status === "human_handoff" && (
-                <div className="px-3.5 py-2 bg-amber-500/10 border-b border-amber-500/20 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2">
+                <div className="px-3.5 py-2 bg-amber-500/10 border-b border-amber-500/20 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2 shrink-0">
                   <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                   <span>
                     El asistente Sintia está en pausa para este chat. Las respuestas enviadas abajo van directamente al cliente.
@@ -513,7 +513,7 @@ export default function ConversacionesPage() {
               )}
 
               {/* Hilo de Mensajes con Burbujas Refinadas */}
-              <div ref={messagesContainerRef} className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50/60 dark:bg-slate-950/40">
+              <div ref={messagesContainerRef} className="flex-1 min-h-0 p-4 overflow-y-auto space-y-3 bg-slate-50/60 dark:bg-slate-950/40">
                 {activeConv.messages?.map((msg: FullMessage) => {
                   const isClient = msg.sender === "client";
                   const isHuman = msg.sender === "human";
@@ -623,7 +623,7 @@ export default function ConversacionesPage() {
               {/* Formulario de Envío de Respuesta Humana */}
               <form
                 onSubmit={handleSendHumanReply}
-                className="p-3 border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2"
+                className="p-3 border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2 shrink-0"
               >
                 <input
                   type="text"
@@ -647,7 +647,7 @@ export default function ConversacionesPage() {
               </form>
             </>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 p-8 text-center space-y-2">
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 p-8 text-center space-y-2">
               <MessageSquare className="w-10 h-10 stroke-1 text-slate-300 dark:text-slate-700" />
               <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                 Selecciona una conversación

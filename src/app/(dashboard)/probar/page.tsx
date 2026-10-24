@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { toast } from "@/components/ui/Toast";
 import {
   PlayCircle,
   ShieldCheck,
@@ -189,7 +190,7 @@ export default function ProbarPage() {
         setExpandedPersona(data.results[0].persona.id);
       }
     } catch (err: any) {
-      alert(`Error en el laboratorio: ${err.message}`);
+      toast.error("Error en el laboratorio", err.message);
     } finally {
       setLabRunning(false);
     }
@@ -210,9 +211,12 @@ export default function ProbarPage() {
 
       if (res.ok) {
         setAddedFaqs((prev) => ({ ...prev, [index]: true }));
+        toast.success("Pregunta agregada", "Se integró con éxito a la Base de Conocimiento.");
+      } else {
+        toast.error("Error al agregar FAQ", "No se pudo guardar la pregunta frecuente.");
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      toast.error("Error de conexión", err.message);
     } finally {
       setAddingFaqIndex(null);
     }

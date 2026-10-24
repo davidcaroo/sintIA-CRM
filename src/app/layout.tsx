@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { ToastProvider } from "@/components/ui/Toast";
+import { ConfirmDialogProvider } from "@/components/ui/ConfirmDialog";
 
 export const metadata: Metadata = {
   title: "Sintia — Asistente de IA para Negocios Locales | Cartagena de Indias",
@@ -35,7 +37,11 @@ export default function RootLayout({
         suppressHydrationWarning
         className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased font-sans transition-colors duration-200"
       >
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <ConfirmDialogProvider>{children}</ConfirmDialogProvider>
+          </ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
