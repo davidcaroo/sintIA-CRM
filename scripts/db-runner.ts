@@ -31,7 +31,7 @@ function isPortOpen(testPort: number, testHost: string): Promise<boolean> {
   });
 }
 
-async function waitForPort(targetPort: number, targetHost: string, maxAttempts = 30): Promise<void> {
+async function waitForPort(targetPort: number, targetHost: string, maxAttempts = 60): Promise<void> {
   for (let i = 0; i < maxAttempts; i++) {
     const open = await isPortOpen(targetPort, targetHost);
     if (open) return;

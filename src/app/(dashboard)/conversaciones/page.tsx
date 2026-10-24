@@ -61,7 +61,7 @@ export default function ConversacionesPage() {
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
   const [sseConnected, setSseConnected] = useState(false);
 
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const loadConversations = useCallback(() => {
     fetch(`/api/conversations?filter=${filter}`)
@@ -78,34 +78,47 @@ export default function ConversacionesPage() {
       .finally(() => setLoading(false));
   }, [filter, selectedId]);
 
-  // Carga inicial
+  // Carga inicial y respaldo periódico
   useEffect(() => {
     loadConversations();
+    const interval = setInterval(loadConversations, 3000);
+    return () => clearInterval(interval);
   }, [loadConversations]);
 
   // Cargar conversación individual
-  const loadActiveConversation = useCallback((id: string) => {
-    setLoadingConv(true);
+  const loadActiveConversation = useCallback((id: string, isSilent = false) => {
+    if (!isSilent) setLoadingConv(true);
     fetch(`/api/conversations/${id}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.conversation) {
-          setActiveConv(data.conversation);
+          setActiveConv((prev: any) => {
+            if (prev && prev.id === data.conversation.id && prev.messages?.length === data.conversation.messages?.length) {
+              return prev;
+            }
+            return data.conversation;
+          });
         }
       })
       .catch((err) => console.error("Error al cargar chat:", err))
-      .finally(() => setLoadingConv(false));
+      .finally(() => {
+        if (!isSilent) setLoadingConv(false);
+      });
   }, []);
 
   useEffect(() => {
     if (selectedId) {
-      loadActiveConversation(selectedId);
+      loadActiveConversation(selectedId, false);
+      const interval = setInterval(() => loadActiveConversation(selectedId, true), 3000);
+      return () => clearInterval(interval);
     }
   }, [selectedId, loadActiveConversation]);
 
-  // Desplazamiento automático al final
+  // Desplazamiento automático al final sólo dentro del contenedor de chat
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
   }, [activeConv?.messages]);
 
   // Conexión Server-Sent Events (SSE) en tiempo real
@@ -500,7 +513,7 @@ export default function ConversacionesPage() {
               )}
 
               {/* Hilo de Mensajes con Burbujas Refinadas */}
-              <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50/60 dark:bg-slate-950/40">
+              <div ref={messagesContainerRef} className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50/60 dark:bg-slate-950/40">
                 {activeConv.messages?.map((msg: FullMessage) => {
                   const isClient = msg.sender === "client";
                   const isHuman = msg.sender === "human";
@@ -604,7 +617,7 @@ export default function ConversacionesPage() {
                     </div>
                   );
                 })}
-                <div ref={chatEndRef} />
+
               </div>
 
               {/* Formulario de Envío de Respuesta Humana */}

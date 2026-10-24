@@ -46,8 +46,24 @@ export async function runAssistantConversation(
   const timeline: ToolExecutionResult[] = [];
   const toolsUsedForMessage: any[] = [];
 
-  // 2. Si no hay clave de OpenRouter configurada, usar el motor de demostración local con tool-calling realista
+  // 2. Si no hay clave de OpenRouter, probar si hay GEMINI_API_KEY directa
   if (!apiKey || apiKey.trim() === "") {
+    if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== "") {
+      try {
+        const geminiModel = preferredModel.includes("gemini")
+          ? preferredModel.replace("google/", "")
+          : "gemini-2.5-flash";
+        const geminiReply = await callGeminiApi(systemPrompt, userMessage, history, geminiModel);
+        return {
+          reply: geminiReply,
+          timeline: [],
+          toolsUsed: [],
+          modelUsed: `google/${geminiModel}`,
+        };
+      } catch (err: any) {
+        console.warn(`⚠️ [Gemini Direct] ${err.message}. Empleando motor inteligente local.`);
+      }
+    }
     return simulateLocalAssistantResponse(userMessage, systemPrompt, isSafe, options);
   }
 
@@ -169,6 +185,58 @@ export async function runAssistantConversation(
     toolsUsed: toolsUsedForMessage,
     modelUsed: activeModel,
   };
+}
+
+async function callGeminiApi(
+  systemPrompt: string,
+  userMessage: string,
+  history: { sender: string; text: string }[],
+  model = "gemini-2.5-flash"
+): Promise<string> {
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey) throw new Error("No GEMINI_API_KEY configurada.");
+
+  const contents: any[] = [];
+  const recentHistory = history.slice(-10);
+  for (const h of recentHistory) {
+    contents.push({
+      role: h.sender === "assistant" ? "model" : "user",
+      parts: [{ text: h.text }],
+    });
+  }
+  contents.push({
+    role: "user",
+    parts: [{ text: userMessage }],
+  });
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: systemPrompt }],
+        },
+        contents,
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 600,
+        },
+      }),
+      signal: AbortSignal.timeout(15000),
+    }
+  );
+
+  if (!res.ok) {
+    const errorBody = await res.text();
+    throw new Error(`Gemini HTTP ${res.status}: ${errorBody.slice(0, 180)}`);
+  }
+
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Respuesta vacía recibida de Gemini.");
+  return text;
 }
 
 async function callOpenRouter(messages: ChatMessage[], tools: any[], model: string) {

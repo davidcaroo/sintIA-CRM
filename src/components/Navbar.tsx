@@ -23,8 +23,8 @@ export function Navbar({ businessName = "Clínica Dental Lumen" }: { businessNam
   const current = pageTitles[pathname] || { title: "Panel", subtitle: businessName };
 
   return (
-    <header className="sticky top-0 z-30 h-16 w-full border-b border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md transition-colors">
-      <div className="h-full px-4 sm:px-6 md:px-8 flex items-center justify-between gap-4">
+    <header className="hidden lg:flex shrink-0 h-16 w-full border-b border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md transition-colors z-20">
+      <div className="w-full h-full px-4 sm:px-6 md:px-8 flex items-center justify-between gap-4">
         {/* Título de la sección / Breadcrumb */}
         <div className="flex items-center gap-3">
           <div>

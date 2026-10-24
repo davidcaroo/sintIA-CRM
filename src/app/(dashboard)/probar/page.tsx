@@ -78,11 +78,11 @@ export default function ProbarPage() {
   const [addingFaqIndex, setAddingFaqIndex] = useState<number | null>(null);
   const [expandedPersona, setExpandedPersona] = useState<string | null>("comprador_decidido");
 
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (activeTab === "simulator") {
-      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (activeTab === "simulator" && messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
   }, [messages, loading, activeTab]);
 
@@ -327,7 +327,7 @@ export default function ProbarPage() {
                 </span>
               </div>
 
-              <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50/30 dark:bg-slate-950/30">
+              <div ref={messagesContainerRef} className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50/30 dark:bg-slate-950/30">
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
@@ -363,7 +363,7 @@ export default function ProbarPage() {
                     <span>Sintia está razonando...</span>
                   </div>
                 )}
-                <div ref={chatEndRef} />
+
               </div>
 
               <form

@@ -68,6 +68,7 @@
 
 html {
   transition: background-color 0.2s ease, color 0.2s ease;
+  height: 100%;
 }
 
 body {
@@ -75,6 +76,8 @@ body {
   background: hsl(var(--background));
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   -webkit-font-smoothing: antialiased;
+  height: 100%;
+  overflow-x: hidden;
 }
 
 /* Scrollbar estilizada para modo claro y oscuro */
