@@ -215,22 +215,32 @@ async function simulateLocalAssistantResponse(
   const toolsUsed: any[] = [];
   let reply = "";
 
-  // 1. Detectar si pregunta por precio o catálogo
+  // Obtener nombre del negocio actual de la BD
+  const business = await db.businessInfo.findFirst();
+  const businessName = business?.name || "InnovaCode Solutions";
+
+  // 1. Detectar si pregunta por precio, cotización o catálogo
   if (
     lower.includes("precio") ||
     lower.includes("cuanto cuesta") ||
     lower.includes("cuánto cuesta") ||
-    lower.includes("blanqueamiento") ||
-    lower.includes("limpieza") ||
-    lower.includes("ortodoncia") ||
-    lower.includes("implante") ||
-    lower.includes("empaste")
+    lower.includes("cotiz") ||
+    lower.includes("landing") ||
+    lower.includes("pagina web") ||
+    lower.includes("página web") ||
+    lower.includes("tienda") ||
+    lower.includes("ecommerce") ||
+    lower.includes("software") ||
+    lower.includes("ia") ||
+    lower.includes("inteligencia artificial") ||
+    lower.includes("automatiz")
   ) {
-    let termino = "limpieza";
-    if (lower.includes("blanqueamiento")) termino = "blanqueamiento";
-    else if (lower.includes("ortodoncia")) termino = "ortodoncia";
-    else if (lower.includes("implante")) termino = "implante";
-    else if (lower.includes("empaste")) termino = "empaste";
+    let termino = "landing";
+    if (lower.includes("tienda") || lower.includes("ecommerce")) termino = "tienda";
+    else if (lower.includes("pagina") || lower.includes("página") || lower.includes("informativa")) termino = "informativa";
+    else if (lower.includes("software") || lower.includes("medida")) termino = "medida";
+    else if (lower.includes("ia") || lower.includes("inteligencia")) termino = "inteligencia";
+    else if (lower.includes("automatiz") || lower.includes("proceso")) termino = "automatización";
 
     const tRes = await executeTool("consultar_servicios", { termino }, { isSafeMode: isSafe });
     timeline.push(tRes);
@@ -238,72 +248,80 @@ async function simulateLocalAssistantResponse(
 
     const serv = tRes.result?.[0];
     if (serv) {
-      reply = `¡Hola! Nuestro tratamiento de ${serv.nombre} tiene un precio de ${serv.precio} y la duración estimada es de ${serv.duracion}. ${
-        serv.requiereValoracionPrevia ? "Requiere una primera valoración previa en consulta. " : ""
-      }¿Te gustaría que busquemos un hueco libre en la agenda para ti?`;
+      reply = `¡Con mucho gusto! En ${businessName}, el servicio de ${serv.nombre} tiene una inversión estimada de ${serv.precio} y requiere una sesión técnica de ${serv.duracion}. ${
+        serv.requiereValoracionPrevia ? "Requiere una valoración técnica inicial para definir el alcance exacto. " : "Incluye hosting, dominio y SEO el primer año. "
+      }¿Te gustaría que agendemos una consulta técnica gratuita de 30 minutos por Google Meet?`;
     } else {
-      reply = `Disponemos de tratamientos avanzados en la clínica. ¿Te gustaría consultar huecos para una primera revisión gratuita y diagnóstico sin compromiso?`;
+      reply = `En ${businessName} desarrollamos Landing Pages ($800.000 COP), Páginas Web Informativas ($1.500.000 COP), Tiendas E-commerce ($2.600.000 COP) y Software a medida con IA. ¿Cuál de estas soluciones se adapta mejor a tu objetivo?`;
     }
   }
-  // 2. Detectar si quiere pedir cita o hueco
+  // 2. Detectar si quiere pedir cita, reunión o consulta
   else if (
     lower.includes("cita") ||
+    lower.includes("reunion") ||
+    lower.includes("reunión") ||
+    lower.includes("consulta") ||
+    lower.includes("meet") ||
     lower.includes("hueco") ||
     lower.includes("hora") ||
     lower.includes("mañana") ||
-    lower.includes("viernes")
+    lower.includes("viernes") ||
+    lower.includes("lunes")
   ) {
     const calRes = await executeTool("consultar_huecos_libres", { fecha: "2026-10-24" }, { isSafeMode: isSafe });
     timeline.push(calRes);
     toolsUsed.push({ name: "consultar_huecos_libres", args: { fecha: "2026-10-24" }, result: calRes.summary });
 
-    // Si ya da su nombre o confirmación, simular crear cita
-    if (lower.includes("10:00") || lower.includes("12:30") || lower.includes("17:00") || lower.includes("me viene bien") || lower.includes("quiero")) {
+    // Si ya da su confirmación o selección de hora
+    if (lower.includes("10:00") || lower.includes("12:30") || lower.includes("17:00") || lower.includes("quiero") || lower.includes("perfecto")) {
       const citaRes = await executeTool(
         "crear_cita",
         {
-          servicio: "Primera visita y revisión",
-          fechaHoraInicio: "2026-10-24T10:00:00+02:00",
-          nombreCliente: "Paciente de Prueba",
-          telefonoCliente: "+34 611 22 33 44",
+          servicio: "Consulta Técnica Gratuita de Diagnóstico",
+          fechaHoraInicio: "2026-10-24T10:00:00-05:00",
+          nombreCliente: options.customerName || "Cliente Potencial",
+          telefonoCliente: options.customerPhone || "+57 311 606 1807",
         },
         { isSafeMode: isSafe }
       );
       timeline.push(citaRes);
       toolsUsed.push({ name: "crear_cita", args: citaRes.args, result: citaRes.summary });
 
-      reply = `¡Perfecto! He reservado tu cita para el viernes a las 10:00h en Clínica Dental Lumen (Calle Gran Vía 32). Te esperamos puntualmente. ¿Deseas que te enviemos confirmación por correo?`;
+      reply = `¡Excelente! He agendado tu Consulta Técnica Gratuita con el equipo de ${businessName} para mañana a las 10:00 AM (hora Colombia). Te enviaremos el enlace de Google Meet. ¿Hay algún detalle específico de tu proyecto que desees que preparemos de antemano?`;
     } else {
-      reply = `He consultado la agenda y tenemos los siguientes huecos libres disponibles:\n• 10:00h\n• 12:30h\n• 17:00h\n¿Cuál de estas opciones te encaja mejor?`;
+      reply = `He consultado la agenda del equipo técnico y tenemos los siguientes espacios disponibles para tu consulta gratuita por Google Meet:\n• 10:00 AM\n• 12:30 PM\n• 5:00 PM (hora Colombia)\n¿Cuál de estos horarios te queda mejor?`;
     }
   }
-  // 3. Detectar urgencia o dolor
+  // 3. Detectar soporte crítico, requerimiento complejo o queja
   else if (
-    lower.includes("dolor") ||
-    lower.includes("urgencia") ||
-    lower.includes("sangre") ||
-    lower.includes("flemón") ||
-    lower.includes("duele")
+    lower.includes("urgente") ||
+    lower.includes("hablar con una persona") ||
+    lower.includes("humano") ||
+    lower.includes("asesor") ||
+    lower.includes("cto") ||
+    lower.includes("ingeniero") ||
+    lower.includes("queja") ||
+    lower.includes("problema")
   ) {
     const hRes = await executeTool(
       "pasar_a_humano",
-      { motivo: "Paciente con dolor agudo o posible urgencia odontológica" },
+      { motivo: "Cliente solicita hablar directamente con el equipo de ingeniería de InnovaCode" },
       { isSafeMode: isSafe }
     );
     timeline.push(hRes);
     toolsUsed.push({ name: "pasar_a_humano", args: hRes.args, result: hRes.summary });
 
-    reply = `Siento mucho que estés pasando por ese dolor. Al tratarse de una urgencia, he transferido de inmediato tu caso a una persona de nuestro equipo clínico para atenderte de forma prioritaria. Si necesitas asistencia inmediata, puedes llamarnos directamente al 912 345 678.`;
+    reply = `Comprendo perfectamente. He transferido de inmediato esta conversación a un ingeniero de nuestro equipo en InnovaCode Solutions para que te contacte de forma directa. También puedes escribirnos o llamarnos al +57 311 606 1807 o al correo contacto@innovacode.click.`;
   }
   // 4. Saludo o respuesta general
   else {
-    reply = `¡Hola! Soy Sintia, asistente de Clínica Dental Lumen. ¿En qué puedo ayudarte hoy? Puedo informarte sobre precios de tratamientos, resolver dudas sobre seguros y aparcamiento o darte cita en la agenda.`;
+    reply = `¡Hola! Soy Sintia, asistente virtual de ${businessName}. 🚀 Creamos software a medida, aplicaciones web, tiendas online y agentes de Inteligencia Artificial para tu empresa. ¿Deseas cotizar un proyecto o agendar una asesoría técnica gratuita?`;
   }
 
   return {
     reply,
     timeline,
     toolsUsed,
-    modelUsed: "local/demo-assistant",
+    modelUsed: "local/innovacode-assistant",
   };
 }
