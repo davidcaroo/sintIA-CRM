@@ -26,16 +26,17 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Extraer Base de Conocimiento oficial de la BD
-    const [faqs, services, profile, config] = await Promise.all([
-      db.knowledgeBase.findMany({ where: { isPublished: true } }),
-      db.service.findMany({ where: { isActive: true } }),
-      db.businessProfile.findFirst(),
+    const [faqs, services, profile, config, notes] = await Promise.all([
+      db.faq.findMany({ orderBy: { order: "asc" } }),
+      db.service.findMany({ orderBy: { order: "asc" } }),
+      db.businessInfo.findFirst(),
       db.assistantConfig.findFirst(),
+      db.knowledgeNote.findMany(),
     ]);
 
     let kbText = `NEGOCIO: ${profile?.name || "Clínica Dental Lumen"}\n`;
-    kbText += `DESCRIPCIÓN: ${profile?.description || ""}\n`;
-    kbText += `DIRECCIÓN: ${profile?.address || ""}, ${profile?.city || ""}\n`;
+    kbText += `ACTIVIDAD: ${profile?.activity || ""}\n`;
+    kbText += `DIRECCIÓN: ${profile?.address || ""}\n`;
     kbText += `TELÉFONO DE ATENCIÓN: ${profile?.phone || ""}\n\n`;
 
     kbText += `=== SERVICIOS DISPONIBLES ===\n`;
@@ -49,7 +50,14 @@ export async function POST(req: NextRequest) {
       kbText += `P: ${f.question}\nR: ${f.answer}\n\n`;
     }
 
-    kbText += `\n=== REGLAS DE CONDUCTA ===\n${config?.rules || "Trato profesional, empático y respetuoso."}\n`;
+    if (notes.length > 0) {
+      kbText += `\n=== NOTAS ADICIONALES DE CONOCIMIENTO ===\n`;
+      for (const n of notes) {
+        kbText += `${n.content}\n\n`;
+      }
+    }
+
+    kbText += `\n=== REGLAS DE CONDUCTA Y RESTRICCIONES ===\n${config?.neverDoRules || "Trato profesional, empático y respetuoso."}\n`;
 
     const results: PersonaRunResult[] = [];
 

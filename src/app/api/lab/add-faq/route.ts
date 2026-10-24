@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Verificar si ya existe una similar
-    const existing = await db.knowledgeBase.findFirst({
+    const existing = await db.faq.findFirst({
       where: {
         question: {
           contains: question.trim(),
@@ -29,12 +29,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const created = await db.knowledgeBase.create({
+    const created = await db.faq.create({
       data: {
         question: question.trim(),
         answer: answer.trim(),
-        category: category || "Laboratorio QA",
-        isPublished: true,
       },
     });
 

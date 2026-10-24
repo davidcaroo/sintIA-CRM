@@ -1,11 +1,11 @@
 import React from "react";
 import Link from "next/link";
-import { Sparkles, ArrowLeft, Shield, Lock, FileText, CheckCircle2 } from "lucide-react";
+import { Sparkles, ArrowLeft, Shield, Lock, FileText, CheckCircle2, Server, Database } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 export const metadata = {
-  title: "Aviso de Privacidad — Sintia",
-  description: "Política de tratamiento de datos personales y privacidad de Sintia de conformidad con la Ley 1581 de 2012.",
+  title: "Aviso de Privacidad — Sintia CRM",
+  description: "Política de tratamiento de datos personales y privacidad para la plataforma tecnológica Sintia CRM bajo la Ley 1581 de 2012.",
 };
 
 export default function PrivacidadPage() {
@@ -27,7 +27,7 @@ export default function PrivacidadPage() {
               <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
                 <Sparkles className="w-4 h-4" />
               </div>
-              <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100">Sintia</span>
+              <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100">Sintia CRM</span>
             </div>
             <ThemeToggle />
           </div>
@@ -39,7 +39,7 @@ export default function PrivacidadPage() {
         <div className="space-y-3 border-b border-slate-200 dark:border-slate-800 pb-8">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-semibold">
             <Shield className="w-3.5 h-3.5" />
-            <span>Habeas Data & Ley 1581 de 2012</span>
+            <span>Ley 1581 de 2012 • Habeas Data • Rol de Proveedor Tecnológico</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
             Aviso de Privacidad y Política de Tratamiento de Datos
@@ -49,27 +49,28 @@ export default function PrivacidadPage() {
           </p>
         </div>
 
-        <div className="prose prose-slate dark:prose-invert max-w-none text-sm leading-relaxed space-y-6 text-slate-700 dark:text-slate-300">
+        <div className="prose prose-slate dark:prose-invert max-w-none text-sm leading-relaxed space-y-7 text-slate-700 dark:text-slate-300">
           <section className="space-y-3">
             <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs">
                 1
               </span>
-              Identificación del Responsable del Tratamiento
+              Rol Legal de Sintia: Proveedor de Software y Encargado del Tratamiento
             </h2>
             <p>
-              <strong>Sintia</strong> (en adelante, la "Plataforma"), operada como solución tecnológica de software para
-              agencias y negocios locales en Cartagena de Indias, Bolívar, República de Colombia, es la responsable del
-              tratamiento de los datos personales recolectados a través de sus canales de atención (WhatsApp mediante
-              Baileys y widget de chat web embebible).
+              El presente Aviso de Privacidad regula el tratamiento de información realizado por la plataforma de software <strong>Sintia CRM</strong>.
             </p>
             <p>
-              Para cualquier consulta o ejercicio de derechos ARCO (Acceso, Rectificación, Cancelación y Oposición), el
-              canal oficial de contacto es el correo electrónico:{" "}
-              <a href="mailto:privacidad@sintia.local" className="text-indigo-600 dark:text-indigo-400 font-semibold underline">
-                privacidad@sintia.local
-              </a>.
+              De conformidad con la Ley 1581 de 2012 y el Decreto 1377 de 2013 de la República de Colombia, se aclara que:
             </p>
+            <ul className="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-400">
+              <li>
+                <strong>El Cliente Suscriptor / Negocio Administrador</strong> actúa como el <strong>Responsable del Tratamiento</strong> de los datos personales de sus propios clientes, pacientes o prospectos con quienes entable comunicación a través del CRM.
+              </li>
+              <li>
+                <strong>Sintia</strong> actúa en calidad de <strong>Encargado del Tratamiento (Data Processor)</strong>, suministrando la infraestructura tecnológica de alojamiento, base de datos e integración con APIs de IA para permitir la operatividad del software.
+              </li>
+            </ul>
           </section>
 
           <section className="space-y-3">
@@ -77,24 +78,18 @@ export default function PrivacidadPage() {
               <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs">
                 2
               </span>
-              Datos Personales que Recolectamos
+              Datos Técnicos Procesados en la Plataforma
             </h2>
-            <p>
-              Cuando un cliente o usuario interactúa con el asistente de IA a través de WhatsApp o el chat web, la
-              plataforma puede recolectar y almacenar:
-            </p>
-            <ul className="list-disc pl-5 space-y-1.5 text-slate-600 dark:text-slate-400">
+            <p>Para la correcta prestación técnica del CRM, el sistema almacena y procesa:</p>
+            <ul className="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-400">
               <li>
-                <strong>Datos de contacto:</strong> Nombre completo, número de teléfono (JID de WhatsApp), correo electrónico y dirección suministrada voluntariamente.
+                <strong>Datos de la Cuenta del Suscriptor:</strong> Nombre, correo corporativo, contraseñas con hash criptográfico unidireccional (bcrypt), logs de actividad y claves de integración de APIs.
               </li>
               <li>
-                <strong>Historial de conversaciones:</strong> Mensajes de texto intercambiados con el asistente virtual para dar seguimiento a citas y consultas.
+                <strong>Datos de Mensajería:</strong> Identificadores telefónicos (JID de WhatsApp), nombres reportados en el perfil de WhatsApp, texto de las conversaciones y fechas de interacción.
               </li>
               <li>
-                <strong>Datos de agendamiento:</strong> Servicio de interés, fecha y hora de la cita programada en Google Calendar.
-              </li>
-              <li>
-                <strong>Datos técnicos:</strong> Dirección IP aproximada y metadatos de sesión web exclusivamente para seguridad y prevención de abusos.
+                <strong>Datos de Eventos e Integraciones:</strong> Citas agendadas en Google Calendar, identificadores de sesión de pago en Stripe y registros de entrega en webhooks o Slack.
               </li>
             </ul>
           </section>
@@ -104,47 +99,47 @@ export default function PrivacidadPage() {
               <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs">
                 3
               </span>
-              Finalidades del Tratamiento
+              Finalidades Técnicas del Procesamiento
             </h2>
-            <p>Los datos suministrados tienen las siguientes finalidades legítimas:</p>
+            <p>El tratamiento de datos por parte de Sintia se restringe estrictamente a finalidades técnicas de software:</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-1">
                 <div className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  <span>Atención al Cliente 24/7</span>
+                  <CheckCircle2 className="w-4 h-4 text-indigo-500" />
+                  <span>Enrutamiento y Respuestas IA</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Responder dudas sobre horarios, tratamientos, precios y ubicación en Cartagena.
+                  Transmitir las preguntas del usuario al modelo LLM configurado (vía OpenRouter) para generar la contestación correspondiente.
                 </p>
               </div>
 
               <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-1">
                 <div className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  <span>Agendamiento en Calendario</span>
+                  <CheckCircle2 className="w-4 h-4 text-indigo-500" />
+                  <span>Sincronización de Calendario</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Coordinar citas en Google Calendar y enviar confirmaciones y recordatorios automáticos.
+                  Escribir y verificar eventos en la cuenta autorizada de Google Calendar del negocio.
                 </p>
               </div>
 
               <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-1">
                 <div className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  <span>Recepción de Anticipos</span>
+                  <CheckCircle2 className="w-4 h-4 text-indigo-500" />
+                  <span>Seguridad y Cifrado</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Generación de enlaces de pago seguro (Stripe) para la seña de reserva.
+                  Custodiar credenciales y tokens mediante cifrado simétrico AES-256-GCM.
                 </p>
               </div>
 
               <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-1">
                 <div className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  <span>Traspaso a un Humano</span>
+                  <CheckCircle2 className="w-4 h-4 text-indigo-500" />
+                  <span>Bandeja de Entrada Multicanal</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Transferir la conversación a un miembro del equipo ante quejas o urgencias.
+                  Presentar las conversaciones en tiempo real en el panel para toma de control por agentes humanos.
                 </p>
               </div>
             </div>
@@ -155,22 +150,17 @@ export default function PrivacidadPage() {
               <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs">
                 4
               </span>
-              Seguridad, Cifrado y Conservación
+              Transferencia y Servicios de IA de Terceros
             </h2>
             <p>
-              La plataforma adopta rigurosos estándares técnicos para proteger la información:
+              Para generar respuestas automáticas, el texto de las conversaciones es enviado de forma cifrada a través
+              del proveedor de inferencia <strong>OpenRouter</strong> hacia modelos de lenguaje autorizados (Anthropic,
+              OpenAI, Google). Sintia instruye la no utilización de estos datos con fines de re-entrenamiento público de
+              modelos fundacionales cuando las opciones del proveedor lo permitan.
             </p>
-            <ul className="list-disc pl-5 space-y-1.5 text-slate-600 dark:text-slate-400">
-              <li>
-                <strong>Cifrado de grado militar:</strong> Todos los tokens de acceso e integraciones se almacenan cifrados con algoritmo <code>AES-256-GCM</code>.
-              </li>
-              <li>
-                <strong>Sesión local de WhatsApp:</strong> Las credenciales multi-dispositivo residen en el servidor seguro y nunca se exponen al cliente.
-              </li>
-              <li>
-                <strong>No venta de datos:</strong> Jamás vendemos, alquilamos ni comercializamos las bases de datos de clientes o pacientes con terceros con fines publicitarios.
-              </li>
-            </ul>
+            <p>
+              <strong>Sintia jamás vende, comercializa ni cede bases de datos de clientes ni listas de contactos a anunciantes o terceros.</strong>
+            </p>
           </section>
 
           <section className="space-y-3">
@@ -178,28 +168,25 @@ export default function PrivacidadPage() {
               <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs">
                 5
               </span>
-              Derechos del Titular y Procedimiento de Supresión
+              Mecanismos para la Supresión de Datos
             </h2>
             <p>
-              Como titular de sus datos personales bajo la ley colombiana, usted tiene derecho a conocer, actualizar,
-              rectificar y revocar la autorización o solicitar la eliminación total de sus datos de nuestras bases de
-              datos en cualquier momento.
-            </p>
-            <p>
-              Para ejercer de inmediato este derecho o consultar los pasos automatizados, diríjase a nuestra sección
-              específica de{" "}
+              Cualquier usuario final o negocio suscriptor puede solicitar en cualquier momento la eliminación total de
+              sus registros, números telefónicos o transcripciones de conversación mediante nuestro canal automatizado
+              de{" "}
               <Link href="/eliminacion-datos" className="text-indigo-600 dark:text-indigo-400 font-semibold underline">
                 Eliminación de Datos
-              </Link>.
+              </Link>{" "}
+              o escribiendo directamente a <code>privacidad@sintia.local</code>.
             </p>
           </section>
         </div>
       </main>
 
-      {/* Pie de página secundario */}
+      {/* Pie de página */}
       <footer className="border-t border-slate-200 dark:border-slate-800 py-8 bg-white dark:bg-slate-900 text-xs text-slate-500 dark:text-slate-400">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>© {new Date().getFullYear()} Sintia. Todos los derechos reservados.</div>
+          <div>© {new Date().getFullYear()} Sintia CRM Platform. Todos los derechos reservados.</div>
           <div className="flex items-center gap-4">
             <Link href="/demo" className="hover:text-indigo-600 dark:hover:text-indigo-400">Landing</Link>
             <Link href="/terminos" className="hover:text-indigo-600 dark:hover:text-indigo-400">Condiciones del servicio</Link>

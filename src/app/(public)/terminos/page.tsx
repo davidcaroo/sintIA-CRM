@@ -1,11 +1,11 @@
 import React from "react";
 import Link from "next/link";
-import { Sparkles, ArrowLeft, FileText, CheckCircle2, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Sparkles, ArrowLeft, FileText, CheckCircle2, AlertTriangle, ShieldCheck, Cpu, Code2, Server } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 export const metadata = {
-  title: "Condiciones del Servicio — Sintia",
-  description: "Términos y condiciones de uso de la plataforma de asistentes de IA Sintia.",
+  title: "Condiciones del Servicio — Sintia CRM",
+  description: "Términos y condiciones de uso de la plataforma de software y CRM de IA Sintia.",
 };
 
 export default function TerminosPage() {
@@ -27,7 +27,7 @@ export default function TerminosPage() {
               <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
                 <Sparkles className="w-4 h-4" />
               </div>
-              <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100">Sintia</span>
+              <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100">Sintia CRM</span>
             </div>
             <ThemeToggle />
           </div>
@@ -38,30 +38,30 @@ export default function TerminosPage() {
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-16 space-y-10">
         <div className="space-y-3 border-b border-slate-200 dark:border-slate-800 pb-8">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-semibold">
-            <FileText className="w-3.5 h-3.5" />
-            <span>Términos y Acuerdos Legales</span>
+            <Code2 className="w-3.5 h-3.5" />
+            <span>Acuerdo de Licencia de Software y Servicios Cloud (B2B SaaS)</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
-            Condiciones del Servicio
+            Condiciones del Servicio — Plataforma Sintia
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Vigente desde: 23 de octubre de 2026 • Aplicable en Colombia y a nivel internacional
+            Última actualización: 23 de octubre de 2026 • Regulado bajo la legislación comercial y de software de Colombia
           </p>
         </div>
 
-        <div className="prose prose-slate dark:prose-invert max-w-none text-sm leading-relaxed space-y-6 text-slate-700 dark:text-slate-300">
+        <div className="prose prose-slate dark:prose-invert max-w-none text-sm leading-relaxed space-y-7 text-slate-700 dark:text-slate-300">
           <section className="space-y-3">
             <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs">
                 1
               </span>
-              Aceptación de las Condiciones
+              Naturaleza Exclusiva como Proveedor de Software Tecnológico
             </h2>
             <p>
-              El acceso, instalación y utilización de la plataforma <strong>Sintia</strong> (en adelante, el "Servicio"), ya
-              sea a través de su panel de administración, el conector de WhatsApp o el widget web, implica la aceptación
-              plena y sin reservas de los presentes Términos y Condiciones. Si usted no está de acuerdo con alguna de
-              estas disposiciones, debe abstenerse de utilizar el Servicio.
+              <strong>Sintia</strong> es única y exclusivamente un <strong>proveedor de infraestructura tecnológica, software como servicio (SaaS) y herramientas de software CRM con automatización por Inteligencia Artificial</strong>.
+            </p>
+            <p>
+              Sintia <strong>no presta, no intermedia ni es parte de los servicios finales</strong> (sean estos de salud, odontología, estética, consultoría legal, comercio electrónico, hotelería o cualquier otra actividad económica) que el usuario, agencia o empresa suscriptora comercialice hacia sus propios clientes finales. Cada negocio que utiliza Sintia es el único y exclusivo responsable ante sus usuarios finales por la calidad, veracidad, cumplimiento y efectos legales de los servicios ofrecidos.
             </p>
           </section>
 
@@ -70,20 +70,18 @@ export default function TerminosPage() {
               <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs">
                 2
               </span>
-              Descripción del Servicio
+              Alcance de la Licencia de Uso
             </h2>
             <p>
-              Sintia es una infraestructura de software que permite a agencias y negocios locales desplegar y configurar
-              asistentes virtuales potenciados por inteligencia artificial generativa con llamada a herramientas
-              (<i>function calling</i>).
+              Se concede al suscriptor o agencia una licencia limitada, revocable, no exclusiva e intransferible para
+              desplegar, configurar y operar la suite de Sintia CRM (incluyendo panel web, conector Baileys para WhatsApp,
+              widget web embebible y módulos de integración con terceros).
             </p>
-            <p>Las funciones principales incluyen:</p>
-            <ul className="list-disc pl-5 space-y-1.5 text-slate-600 dark:text-slate-400">
-              <li>Recepción y respuesta de consultas en tiempo real por WhatsApp y chat web.</li>
-              <li>Consulta de disponibilidad y agendamiento directo en Google Calendar.</li>
-              <li>Generación de enlaces de pago mediante Stripe para cobro de anticipos o señas.</li>
-              <li>Notificaciones internas al equipo a través de Slack o correo electrónico con Gmail.</li>
-              <li>Sincronización de contactos en Google Sheets y webhooks externos.</li>
+            <p>Queda expresamente prohibido:</p>
+            <ul className="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-400">
+              <li>Utilizar el software para actividades ilícitas, fraudulentas, suplantación de identidad o engaño comercial.</li>
+              <li>Elaborar campañas de spam masivo o mensajería no solicitada que violen normativas antispam o de protección al consumidor.</li>
+              <li>Intentar descompilar, eludir protecciones de seguridad o comprometer la infraestructura de la base de datos o servidores.</li>
             </ul>
           </section>
 
@@ -92,23 +90,25 @@ export default function TerminosPage() {
               <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs">
                 3
               </span>
-              Uso Responsable y Límites de la Inteligencia Artificial
+              Exención de Responsabilidad por Modelos de Lenguaje e Inteligencia Artificial
             </h2>
             <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 space-y-2 text-xs text-amber-900 dark:text-amber-200">
               <div className="flex items-center gap-2 font-bold text-sm">
                 <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                <span>Limitación de Responsabilidad Médica y Diagnóstica</span>
+                <span>Naturaleza Probabilística de los Modelos LLM ("As Is" / "Tal Cual")</span>
               </div>
               <p>
-                El asistente de IA opera como una herramienta complementaria de atención y agendamiento administrativo.
-                Bajo ninguna circunstancia sustituye el criterio, valoración presencial, diagnóstico ni tratamiento de un
-                profesional de la salud matriculado. Sintia no prescribe medicamentos ni emite diagnósticos clínicos.
+                Los asistentes virtuales integrados en Sintia se ejecutan mediante APIs y modelos de lenguaje de terceros
+                (tales como OpenRouter, Anthropic, OpenAI o Google). Dichos modelos operan mediante algoritmos
+                probabilísticos y pueden presentar alucinaciones, respuestas inexactas o desactualizadas.
+              </p>
+              <p>
+                <strong>Sintia no garantiza la infalibilidad técnica ni la exactitud material de los textos emitidos por los modelos de IA.</strong> El
+                administrador de cada cuenta es el único responsable de auditar las instrucciones del sistema (prompt),
+                alimentar correctamente su base de conocimiento y activar las reglas de traspaso a supervisión humana
+                (<i>handoff</i>) cuando sea necesario.
               </p>
             </div>
-            <p className="pt-2">
-              El administrador del negocio se compromete a mantener actualizada la información de precios, horarios y
-              servicios en la Base de Conocimiento, así como a revisar periódicamente las alertas de handoff humano.
-            </p>
           </section>
 
           <section className="space-y-3">
@@ -116,13 +116,17 @@ export default function TerminosPage() {
               <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs">
                 4
               </span>
-              Conexión con WhatsApp y Servicios de Terceros
+              Conexión con WhatsApp y Riesgos Operativos de Plataformas Externas
             </h2>
             <p>
-              La vinculación con WhatsApp se efectúa mediante protocolos multi-dispositivo (Baileys). El usuario es
-              responsable de utilizar su línea telefónica en cumplimiento con las Políticas de Comercio y Términos de
-              Servicio de Meta Platforms, Inc. Sintia no es responsable por suspensiones de cuenta derivadas del envío
-              masivo de spam o prácticas no autorizadas por terceros.
+              La vinculación del canal de WhatsApp se efectúa a través de protocolos de socket multi-dispositivo (librería
+              Baileys). WhatsApp y Meta Platforms Inc. son compañías independientes y ajenas a Sintia.
+            </p>
+            <p>
+              El suscriptor reconoce y acepta expresamente que el uso de cualquier automatización en WhatsApp conlleva
+              riesgos de desconexión, actualización de protocolos o incluso bloqueo/suspensión de líneas por parte de Meta si
+              se detectan patrones de abuso o incumplimiento de sus Políticas de Comercio. <strong>Sintia no se hace responsable
+              por sanciones, bloqueos de números telefónicos o interrupciones de servicio originadas por decisiones de Meta Platforms Inc.</strong>
             </p>
           </section>
 
@@ -131,13 +135,23 @@ export default function TerminosPage() {
               <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs">
                 5
               </span>
-              Propiedad Intelectual y Licenciamiento
+              Pasarelas de Pago e Integraciones de Terceros (Stripe, Google, Slack)
             </h2>
             <p>
-              Todos los derechos de propiedad intelectual sobre el código fuente, la marca Sintia, interfaces gráficas y
-              diseños pertenecen a sus legítimos titulares. Se concede al usuario una licencia de uso no exclusiva para
-              la operación interna o instalación en clientes de su agencia.
+              Sintia provee conectores técnicos hacia servicios externos como Google Calendar, Gmail, Google Sheets,
+              Stripe y Slack.
             </p>
+            <ul className="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-400">
+              <li>
+                <strong>Pagos y Señas (Stripe):</strong> Sintia genera enlaces de cobro, pero no procesa, no custodia ni
+                retiene fondos bancarios. Cualquier disputa, contracargo, comisión o retención fiscal corresponde a la
+                relación directa entre el suscriptor y Stripe Inc.
+              </li>
+              <li>
+                <strong>Disponibilidad de APIs:</strong> No nos responsabilizamos por caídas de servicio, modificaciones de
+                cuotas o revocaciones de permisos en las plataformas de Google LLC, Slack Technologies o pasarelas de pago.
+              </li>
+            </ul>
           </section>
 
           <section className="space-y-3">
@@ -145,12 +159,32 @@ export default function TerminosPage() {
               <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs">
                 6
               </span>
-              Legislación Aplicable y Jurisdicción
+              Disponibilidad, Mantenimiento y Límite de Responsabilidad
             </h2>
             <p>
-              Las presentes Condiciones se regirán e interpretarán de acuerdo con las leyes de la República de Colombia.
-              Cualquier controversia derivada de este acuerdo será sometida a los tribunales competentes de la ciudad de
-              Cartagena de Indias, Bolívar, Colombia.
+              El software se entrega "tal cual" y "según disponibilidad". Sintia realiza esfuerzos comercialmente
+              razonables para mantener una disponibilidad continua del servicio; sin embargo, no garantiza que la
+              operación esté libre de errores o paradas programadas por mantenimiento.
+            </p>
+            <p>
+              En la máxima medida permitida por la ley aplicable, la responsabilidad total de Sintia ante el suscriptor
+              por cualquier daño derivado del uso o imposibilidad de uso del software estará limitada al valor total
+              pagado por el suscriptor por la licencia del software durante los últimos tres (3) meses anteriores al
+              hecho generador del reclamo.
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs">
+                7
+              </span>
+              Ley Aplicable y Jurisdicción
+            </h2>
+            <p>
+              Estas Condiciones de Software se rigen íntegramente por las leyes comerciales de la República de Colombia.
+              Cualquier controversia relacionada con la validez, ejecución o terminación de este contrato se resolverá
+              ante los juzgados y tribunales competentes de la ciudad de Cartagena de Indias, Bolívar, Colombia.
             </p>
           </section>
         </div>
@@ -159,7 +193,7 @@ export default function TerminosPage() {
       {/* Pie de página */}
       <footer className="border-t border-slate-200 dark:border-slate-800 py-8 bg-white dark:bg-slate-900 text-xs text-slate-500 dark:text-slate-400">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>© {new Date().getFullYear()} Sintia. Todos los derechos reservados.</div>
+          <div>© {new Date().getFullYear()} Sintia CRM Platform. Todos los derechos reservados.</div>
           <div className="flex items-center gap-4">
             <Link href="/demo" className="hover:text-indigo-600 dark:hover:text-indigo-400">Landing</Link>
             <Link href="/privacidad" className="hover:text-indigo-600 dark:hover:text-indigo-400">Aviso de privacidad</Link>

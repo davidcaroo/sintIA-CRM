@@ -17,13 +17,16 @@ const PUBLIC_API_PREFIXES = [
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Permitir estáticos, demo y login
+  // Permitir estáticos, demo, login y páginas legales públicas
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/static") ||
     pathname.includes(".") ||
     pathname === "/login" ||
-    pathname.startsWith("/demo")
+    pathname.startsWith("/demo") ||
+    pathname === "/privacidad" ||
+    pathname === "/terminos" ||
+    pathname === "/eliminacion-datos"
   ) {
     return NextResponse.next();
   }
