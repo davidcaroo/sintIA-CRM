@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { runAssistantConversation } from "@/lib/ai/openrouter";
+import { emitEvent } from "@/lib/events/bus";
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,11 +54,31 @@ export async function POST(req: NextRequest) {
 
     // Si ha sido tomada por una persona humana
     if (conversation.status === "human_handoff") {
-      await db.message.create({
+      const clientMsg = await db.message.create({
         data: {
           conversationId: conversation.id,
           sender: "client",
           text: message,
+        },
+      });
+      emitEvent({
+        type: "message:new",
+        data: {
+          conversationId: conversation.id,
+          message: {
+            id: clientMsg.id,
+            sender: "client",
+            text: clientMsg.text,
+            createdAt: clientMsg.createdAt.toISOString(),
+          },
+        },
+      });
+      emitEvent({
+        type: "conversation:updated",
+        data: {
+          conversationId: conversation.id,
+          lastMessageAt: clientMsg.createdAt.toISOString(),
+          previewText: clientMsg.text,
         },
       });
       return NextResponse.json({
@@ -67,7 +88,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Guardar mensaje entrante del cliente
-    await db.message.create({
+    const clientMsg = await db.message.create({
       data: {
         conversationId: conversation.id,
         sender: "client",
@@ -78,6 +99,28 @@ export async function POST(req: NextRequest) {
     await db.conversation.update({
       where: { id: conversation.id },
       data: { lastMessageAt: new Date() },
+    });
+
+    emitEvent({
+      type: "message:new",
+      data: {
+        conversationId: conversation.id,
+        message: {
+          id: clientMsg.id,
+          sender: "client",
+          text: clientMsg.text,
+          createdAt: clientMsg.createdAt.toISOString(),
+        },
+      },
+    });
+
+    emitEvent({
+      type: "conversation:updated",
+      data: {
+        conversationId: conversation.id,
+        lastMessageAt: clientMsg.createdAt.toISOString(),
+        previewText: clientMsg.text,
+      },
     });
 
     // Historial
@@ -96,12 +139,35 @@ export async function POST(req: NextRequest) {
     });
 
     // Guardar respuesta del asistente
-    await db.message.create({
+    const assistantMsg = await db.message.create({
       data: {
         conversationId: conversation.id,
         sender: "assistant",
         text: aiResponse.reply,
         toolsUsed: aiResponse.toolsUsed,
+      },
+    });
+
+    emitEvent({
+      type: "message:new",
+      data: {
+        conversationId: conversation.id,
+        message: {
+          id: assistantMsg.id,
+          sender: "assistant",
+          text: assistantMsg.text,
+          toolsUsed: assistantMsg.toolsUsed,
+          createdAt: assistantMsg.createdAt.toISOString(),
+        },
+      },
+    });
+
+    emitEvent({
+      type: "conversation:updated",
+      data: {
+        conversationId: conversation.id,
+        lastMessageAt: assistantMsg.createdAt.toISOString(),
+        previewText: assistantMsg.text,
       },
     });
 
@@ -113,6 +179,14 @@ export async function POST(req: NextRequest) {
         data: {
           status: "human_handoff",
           handoffReason: "Activado por herramienta pasar_a_humano",
+        },
+      });
+
+      emitEvent({
+        type: "conversation:takeover",
+        data: {
+          conversationId: conversation.id,
+          status: "human",
         },
       });
     }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { emitEvent } from "@/lib/events/bus";
 
 export async function POST(
   req: NextRequest,
@@ -34,6 +35,29 @@ export async function POST(
     await db.conversation.update({
       where: { id },
       data: { lastMessageAt: new Date() },
+    });
+
+    // Notificar en tiempo real por SSE
+    emitEvent({
+      type: "message:new",
+      data: {
+        conversationId: id,
+        message: {
+          id: msg.id,
+          sender: "human",
+          text: msg.text,
+          createdAt: msg.createdAt.toISOString(),
+        },
+      },
+    });
+
+    emitEvent({
+      type: "conversation:updated",
+      data: {
+        conversationId: id,
+        lastMessageAt: msg.createdAt.toISOString(),
+        previewText: msg.text,
+      },
     });
 
     // 2. Si el canal es WhatsApp, intentar enviar vía Baileys si el socket está activo

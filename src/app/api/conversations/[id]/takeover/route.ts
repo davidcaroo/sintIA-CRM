@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { emitEvent } from "@/lib/events/bus";
 
 export async function POST(
   req: NextRequest,
@@ -18,6 +19,23 @@ export async function POST(
         handoffReason: action === "takeover" ? "Control tomado manualmente desde el panel" : null,
       },
       include: { contact: true },
+    });
+
+    emitEvent({
+      type: "conversation:takeover",
+      data: {
+        conversationId: id,
+        status: action === "takeover" ? "human" : "bot",
+      },
+    });
+
+    emitEvent({
+      type: "conversation:updated",
+      data: {
+        conversationId: id,
+        lastMessageAt: updated.lastMessageAt.toISOString(),
+        status: newStatus,
+      },
     });
 
     await db.activityLog.create({
