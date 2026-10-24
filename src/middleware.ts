@@ -8,6 +8,7 @@ const JWT_SECRET = new TextEncoder().encode(
 const PUBLIC_API_PREFIXES = [
   "/api/auth/login",
   "/api/auth/logout",
+  "/api/auth/setup",
   "/api/chat",
   "/api/widget",
   "/api/integrations/google/callback",

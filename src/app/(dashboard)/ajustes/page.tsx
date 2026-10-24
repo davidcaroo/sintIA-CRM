@@ -177,16 +177,27 @@ export default function AjustesPage() {
   };
 
   const handleDeleteUser = async (id: string) => {
-    if (!confirm("¿Deseas eliminar este usuario?")) return;
+    const ok = await confirmDialog({
+      title: "¿Eliminar usuario?",
+      description: "¿Estás seguro de que deseas revocar el acceso a este usuario del panel?",
+      confirmText: "Eliminar",
+      destructive: true,
+    });
+    if (!ok) return;
+
     try {
       const res = await fetch(`/api/settings/users?id=${id}`, { method: "DELETE" });
       if (res.ok) {
         const uRes = await fetch("/api/settings/users");
         const uData = await uRes.json();
         if (uData.users) setUsers(uData.users);
+        toast.success("Usuario eliminado", "El acceso ha sido revocado.");
+      } else {
+        toast.error("Error", "No se pudo eliminar el usuario.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      toast.error("Error de conexión", err.message);
     }
   };
 
