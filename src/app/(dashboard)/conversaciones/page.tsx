@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   MessageSquare,
   Search,
@@ -12,7 +12,11 @@ import {
   Send,
   ChevronDown,
   ChevronRight,
-  AlertTriangle,
+  AlertCircle,
+  Radio,
+  CheckCircle2,
+  Calendar,
+  Sparkles,
 } from "lucide-react";
 
 interface ConversationItem {
@@ -49,16 +53,17 @@ export default function ConversacionesPage() {
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Conversación seleccionada
+  // Conversación activa
   const [activeConv, setActiveConv] = useState<any>(null);
   const [loadingConv, setLoadingConv] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [sendingReply, setSendingReply] = useState(false);
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
+  const [sseConnected, setSseConnected] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const loadConversations = () => {
+  const loadConversations = useCallback(() => {
     fetch(`/api/conversations?filter=${filter}`)
       .then((r) => r.json())
       .then((data) => {
@@ -69,17 +74,17 @@ export default function ConversacionesPage() {
           }
         }
       })
+      .catch((err) => console.error("Error cargando conversaciones:", err))
       .finally(() => setLoading(false));
-  };
+  }, [filter, selectedId]);
 
+  // Carga inicial
   useEffect(() => {
     loadConversations();
-    const interval = setInterval(loadConversations, 6000);
-    return () => clearInterval(interval);
-  }, [filter]);
+  }, [loadConversations]);
 
   // Cargar conversación individual
-  const loadActiveConversation = (id: string) => {
+  const loadActiveConversation = useCallback((id: string) => {
     setLoadingConv(true);
     fetch(`/api/conversations/${id}`)
       .then((r) => r.json())
@@ -88,18 +93,125 @@ export default function ConversacionesPage() {
           setActiveConv(data.conversation);
         }
       })
+      .catch((err) => console.error("Error al cargar chat:", err))
       .finally(() => setLoadingConv(false));
-  };
+  }, []);
 
   useEffect(() => {
     if (selectedId) {
       loadActiveConversation(selectedId);
     }
-  }, [selectedId]);
+  }, [selectedId, loadActiveConversation]);
 
+  // Desplazamiento automático al final
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeConv?.messages]);
+
+  // Conexión Server-Sent Events (SSE) en tiempo real
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: NodeJS.Timeout;
+
+    const connectSse = () => {
+      try {
+        eventSource = new EventSource("/api/conversations/stream");
+
+        eventSource.addEventListener("connected", () => {
+          setSseConnected(true);
+        });
+
+        eventSource.addEventListener("message:new", (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            const { conversationId, message } = data;
+
+            // 1. Si es de la conversación seleccionada, agregar al hilo
+            if (selectedId && conversationId === selectedId) {
+              setActiveConv((prev: any) => {
+                if (!prev || prev.id !== conversationId) return prev;
+                // Evitar duplicados
+                const exists = prev.messages?.some((m: any) => m.id === message.id);
+                if (exists) return prev;
+                return {
+                  ...prev,
+                  messages: [...(prev.messages || []), message],
+                };
+              });
+            }
+
+            // 2. Actualizar lista de conversaciones izquierda
+            setConversations((prev) => {
+              const idx = prev.findIndex((c) => c.id === conversationId);
+              if (idx === -1) {
+                // Conversación nueva: recargar lista completa
+                loadConversations();
+                return prev;
+              }
+              const updated = [...prev];
+              updated[idx] = {
+                ...updated[idx],
+                lastMessageAt: message.createdAt || new Date().toISOString(),
+                messages: [message],
+              };
+              // Mover al inicio de la lista
+              const [item] = updated.splice(idx, 1);
+              return [item, ...updated];
+            });
+          } catch (err) {
+            console.error("Error procesando evento SSE message:new:", err);
+          }
+        });
+
+        eventSource.addEventListener("conversation:updated", (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            setConversations((prev) => {
+              const idx = prev.findIndex((c) => c.id === data.conversationId);
+              if (idx === -1) return prev;
+              const updated = [...prev];
+              updated[idx] = {
+                ...updated[idx],
+                lastMessageAt: data.lastMessageAt || updated[idx].lastMessageAt,
+                status: data.status || updated[idx].status,
+              };
+              return updated;
+            });
+          } catch {}
+        });
+
+        eventSource.addEventListener("conversation:takeover", (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            const newStatus = data.status === "human" ? "human_handoff" : "bot";
+            if (selectedId === data.conversationId) {
+              setActiveConv((prev: any) => (prev ? { ...prev, status: newStatus } : prev));
+            }
+            setConversations((prev) =>
+              prev.map((c) => (c.id === data.conversationId ? { ...c, status: newStatus } : c))
+            );
+          } catch {}
+        });
+
+        eventSource.onerror = () => {
+          setSseConnected(false);
+          eventSource?.close();
+          // Intentar reconectar tras 4 segundos
+          reconnectTimeout = setTimeout(connectSse, 4000);
+        };
+      } catch (err) {
+        setSseConnected(false);
+        reconnectTimeout = setTimeout(connectSse, 4000);
+      }
+    };
+
+    connectSse();
+
+    return () => {
+      clearTimeout(reconnectTimeout);
+      eventSource?.close();
+    };
+  }, [selectedId, loadConversations]);
 
   const handleTakeover = async (action: "takeover" | "release") => {
     if (!selectedId) return;
@@ -122,26 +234,35 @@ export default function ConversacionesPage() {
     e.preventDefault();
     if (!replyText.trim() || !selectedId || sendingReply) return;
 
+    const text = replyText.trim();
     setSendingReply(true);
+    setReplyText("");
+
     try {
       const res = await fetch(`/api/conversations/${selectedId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: replyText }),
+        body: JSON.stringify({ text }),
       });
       if (res.ok) {
-        setReplyText("");
         loadActiveConversation(selectedId);
-        loadConversations();
+      } else {
+        // En caso de fallo, restaurar texto
+        setReplyText(text);
       }
     } catch (err) {
       console.error(err);
+      setReplyText(text);
     } finally {
       setSendingReply(false);
     }
   };
 
   const filteredList = conversations.filter((c) => {
+    if (filter === "handoff" && c.status !== "human_handoff") return false;
+    if (filter === "whatsapp" && c.channel !== "whatsapp") return false;
+    if (filter === "web" && c.channel !== "web") return false;
+
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     const name = (c.contact?.name || "").toLowerCase();
@@ -150,65 +271,102 @@ export default function ConversacionesPage() {
     return name.includes(q) || phone.includes(q) || lastMsg.includes(q);
   });
 
+  const countHandoff = conversations.filter((c) => c.status === "human_handoff").length;
+
   return (
-    <div className="space-y-6 pb-12 transition-colors">
-      {/* Encabezado */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
+    <div className="space-y-4 pb-10 transition-colors max-w-7xl mx-auto">
+      {/* Barra de Título Minimalista estilo Vocero */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/70 dark:border-slate-800/80">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Bandeja de Conversaciones</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Supervisa los chats en vivo, consulta las herramientas utilizadas o toma el control humano.
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+              Bandeja de Conversaciones
+            </h1>
+            <span
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                sseConnected
+                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20"
+                  : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
+              }`}
+              title={sseConnected ? "Conexión SSE en vivo activa" : "Reconectando canal en vivo..."}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${sseConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
+              {sseConnected ? "En vivo (SSE)" : "Conectando..."}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Mensajería multicanal en tiempo real con supervisión de herramientas y traspaso humano.
           </p>
         </div>
       </div>
 
-      {/* Layout de Dos Columnas */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden h-[720px] transition-colors">
-        {/* COLUMNA IZQUIERDA: LISTA Y FILTROS (5 columnas en desktop) */}
-        <div className="lg:col-span-5 border-r border-slate-200/80 dark:border-slate-800 flex flex-col h-full bg-slate-50/30 dark:bg-slate-900/60">
+      {/* Contenedor Principal de Dos Columnas */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden h-[760px]">
+        {/* COLUMNA IZQUIERDA: LISTA Y FILTROS ESTILO VOCERO (5 cols) */}
+        <div className="lg:col-span-5 border-r border-slate-200/80 dark:border-slate-800 flex flex-col h-full bg-slate-50/50 dark:bg-slate-950/40">
           {/* Buscador */}
-          <div className="p-3.5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+          <div className="p-3 border-b border-slate-200/70 dark:border-slate-800/80 bg-white dark:bg-slate-900">
             <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400 dark:text-slate-500" />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400 dark:text-slate-500" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por cliente, teléfono o texto..."
-                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400"
+                placeholder="Buscar cliente, teléfono o mensaje..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-950/60 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-400 transition"
               />
             </div>
           </div>
 
-          {/* Filtros Rápidos */}
-          <div className="px-3.5 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center gap-1.5 overflow-x-auto bg-slate-50/50 dark:bg-slate-800/40">
+          {/* Filtros estilo Tabs Vocero */}
+          <div className="px-3 py-2 border-b border-slate-200/60 dark:border-slate-800/80 flex items-center gap-1 overflow-x-auto bg-slate-100/50 dark:bg-slate-900/60 text-xs">
             {[
-              { id: "all", label: "Todas" },
-              { id: "handoff", label: "Necesitan atención" },
+              { id: "all", label: "Todas", count: conversations.length },
+              { id: "handoff", label: "En mano humana", count: countHandoff },
               { id: "whatsapp", label: "WhatsApp" },
               { id: "web", label: "Web" },
-            ].map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setFilter(f.id)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-                  filter === f.id
-                    ? "bg-indigo-600 text-white"
-                    : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+            ].map((f) => {
+              const active = filter === f.id;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setFilter(f.id)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition flex items-center gap-1.5 ${
+                    active
+                      ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-2xs border border-slate-200/80 dark:border-slate-700 font-semibold"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/40"
+                  }`}
+                >
+                  <span>{f.label}</span>
+                  {f.count !== undefined && f.count > 0 && (
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${
+                        f.id === "handoff"
+                          ? "bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 font-bold"
+                          : active
+                          ? "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200"
+                          : "bg-slate-200 dark:bg-slate-800 text-slate-500"
+                      }`}
+                    >
+                      {f.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* Lista de Conversaciones */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
             {loading ? (
-              <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500">Cargando chats...</div>
+              <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500">
+                Sincronizando bandeja...
+              </div>
             ) : filteredList.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500">No se encontraron conversaciones.</div>
+              <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500">
+                No hay conversaciones en esta vista.
+              </div>
             ) : (
               filteredList.map((c) => {
                 const isSelected = selectedId === c.id;
@@ -219,22 +377,42 @@ export default function ConversacionesPage() {
                   <div
                     key={c.id}
                     onClick={() => setSelectedId(c.id)}
-                    className={`p-3.5 cursor-pointer transition flex items-start gap-3 text-xs ${
+                    className={`p-3 cursor-pointer transition flex items-start gap-2.5 text-xs relative ${
                       isSelected
-                        ? "bg-indigo-50/70 dark:bg-indigo-950/60 border-l-4 border-l-indigo-600 dark:border-l-indigo-400"
-                        : "hover:bg-slate-50/80 dark:hover:bg-slate-800/60 bg-white dark:bg-slate-900"
+                        ? "bg-slate-100/80 dark:bg-slate-800/70"
+                        : "hover:bg-white/80 dark:hover:bg-slate-900/60 bg-transparent"
                     }`}
                   >
-                    <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold flex items-center justify-center shrink-0 uppercase text-xs">
-                      {(c.contact?.name || "C").slice(0, 2)}
+                    {/* Borde activo sutil estilo Vocero */}
+                    {isSelected && (
+                      <span className="absolute left-0 top-0 bottom-0 w-1 bg-slate-900 dark:bg-slate-100 rounded-r" />
+                    )}
+
+                    {/* Avatar con badge integrado de canal */}
+                    <div className="relative shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold flex items-center justify-center uppercase text-[11px] border border-slate-300/40 dark:border-slate-700">
+                        {(c.contact?.name || "C").slice(0, 2)}
+                      </div>
+                      <span
+                        className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center border border-white dark:border-slate-900 ${
+                          c.channel === "whatsapp" ? "bg-emerald-500 text-white" : "bg-sky-500 text-white"
+                        }`}
+                        title={c.channel === "whatsapp" ? "WhatsApp" : "Chat Web"}
+                      >
+                        {c.channel === "whatsapp" ? (
+                          <Smartphone className="w-2 h-2" />
+                        ) : (
+                          <Globe className="w-2 h-2" />
+                        )}
+                      </span>
                     </div>
 
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-900 dark:text-slate-100 truncate">
+                    <div className="flex-1 min-w-0 space-y-0.5">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-semibold text-slate-900 dark:text-slate-100 truncate text-xs">
                           {c.contact?.name || c.contact?.phone || "Cliente"}
                         </span>
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0">
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0 font-mono">
                           {new Date(c.lastMessageAt).toLocaleTimeString("es-CO", {
                             hour: "2-digit",
                             minute: "2-digit",
@@ -248,21 +426,15 @@ export default function ConversacionesPage() {
                       </div>
 
                       <div className="flex items-center gap-1.5 pt-0.5">
-                        {c.channel === "whatsapp" ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">
-                            <Smartphone className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                            WhatsApp
+                        {isHandoff ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-900">
+                            <UserCheck className="w-2.5 h-2.5" />
+                            Mano humana
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-sky-700 dark:text-sky-400 font-medium">
-                            <Globe className="w-3 h-3 text-sky-600 dark:text-sky-400" />
-                            Web
-                          </span>
-                        )}
-
-                        {isHandoff && (
-                          <span className="px-1.5 py-0.2 rounded-md bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-400 border border-red-200/60 dark:border-red-900 font-bold text-[9px]">
-                            Esperando persona
+                          <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Atiende Sintia
                           </span>
                         )}
                       </div>
@@ -274,70 +446,86 @@ export default function ConversacionesPage() {
           </div>
         </div>
 
-        {/* COLUMNA DERECHA: CONVERSACIÓN ABIERTA Y CONTROLES (7 columnas en desktop) */}
-        <div className="lg:col-span-7 flex flex-col h-full bg-white dark:bg-slate-900 transition-colors">
+        {/* COLUMNA DERECHA: CONVERSACIÓN ABIERTA (7 cols) */}
+        <div className="lg:col-span-7 flex flex-col h-full bg-slate-50/30 dark:bg-slate-900/40 transition-colors">
           {activeConv ? (
             <>
-              {/* Cabecera del chat abierto */}
-              <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/40 dark:bg-slate-800/40">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-bold flex items-center justify-center uppercase text-xs border border-indigo-200 dark:border-indigo-800">
+              {/* Cabecera del chat activo estilo Vocero */}
+              <div className="p-3.5 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 bg-white dark:bg-slate-900">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold flex items-center justify-center uppercase text-xs border border-slate-200 dark:border-slate-700 shrink-0">
                     {(activeConv.contact?.name || "C").slice(0, 2)}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                      <span className="font-bold text-slate-900 dark:text-slate-100 text-xs truncate">
                         {activeConv.contact?.name || "Cliente"}
                       </span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        {activeConv.contact?.phone}
-                      </span>
+                      {activeConv.contact?.phone && (
+                        <span className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">
+                          {activeConv.contact.phone}
+                        </span>
+                      )}
                     </div>
-                    <div className="text-[11px] text-slate-400 dark:text-slate-500">
-                      Canal: <strong className="capitalize text-slate-600 dark:text-slate-300">{activeConv.channel}</strong> • Estado:{" "}
-                      <strong className={activeConv.status === "human_handoff" ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}>
-                        {activeConv.status === "human_handoff" ? "En mano humana" : "Atendido por Sintia"}
-                      </strong>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                      <span className="capitalize">{activeConv.channel}</span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            activeConv.status === "human_handoff" ? "bg-amber-500" : "bg-emerald-500"
+                          }`}
+                        />
+                        <strong
+                          className={`font-medium ${
+                            activeConv.status === "human_handoff"
+                              ? "text-amber-700 dark:text-amber-400"
+                              : "text-emerald-700 dark:text-emerald-400"
+                          }`}
+                        >
+                          {activeConv.status === "human_handoff" ? "Control Humano" : "Sintia Activa"}
+                        </strong>
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Botón Tomar el control / Devolver al asistente */}
-                <div>
+                {/* Botón Takeover minimalista */}
+                <div className="shrink-0">
                   {activeConv.status === "human_handoff" ? (
                     <button
                       type="button"
                       onClick={() => handleTakeover("release")}
-                      className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 transition flex items-center gap-1.5 shadow-2xs"
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 dark:text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition flex items-center gap-1.5 shadow-2xs"
                     >
                       <Bot className="w-3.5 h-3.5" />
-                      <span>Devolver al asistente</span>
+                      <span>Devolver a Sintia</span>
                     </button>
                   ) : (
                     <button
                       type="button"
                       onClick={() => handleTakeover("takeover")}
-                      className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-300 dark:border-amber-700 transition flex items-center gap-1.5 shadow-2xs"
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 transition flex items-center gap-1.5 shadow-2xs"
                     >
-                      <UserCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                      <span>Tomar el control</span>
+                      <UserCheck className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                      <span>Tomar control manual</span>
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Banner de Handoff si aplica */}
+              {/* Banner de Silencio Asistente si está en mano humana */}
               {activeConv.status === "human_handoff" && (
-                <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <div className="px-3.5 py-2 bg-amber-500/10 border-b border-amber-500/20 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                   <span>
-                    El asistente está en silencio en esta conversación. Responde directamente desde el formulario inferior.
+                    El asistente Sintia está en pausa para este chat. Las respuestas enviadas abajo van directamente al cliente.
                   </span>
                 </div>
               )}
 
-              {/* Mensajes */}
-              <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50/20 dark:bg-slate-900/40">
+              {/* Hilo de Mensajes con Burbujas Refinadas */}
+              <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50/60 dark:bg-slate-950/40">
                 {activeConv.messages?.map((msg: FullMessage) => {
                   const isClient = msg.sender === "client";
                   const isHuman = msg.sender === "human";
@@ -348,38 +536,47 @@ export default function ConversacionesPage() {
                   return (
                     <div
                       key={msg.id}
-                      className={`flex gap-3 ${isClient ? "justify-start" : "justify-end"}`}
+                      className={`flex gap-2.5 ${isClient ? "justify-start" : "justify-end"}`}
                     >
                       {isClient && (
-                        <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
-                          <User className="w-4 h-4" />
+                        <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center text-[10px] font-bold shrink-0 mt-1 border border-slate-300/40 dark:border-slate-700">
+                          <User className="w-3 h-3" />
                         </div>
                       )}
 
-                      <div className="max-w-[75%] space-y-1">
+                      <div className="max-w-[78%] space-y-1">
                         <div
-                          className={`p-3.5 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap ${
+                          className={`p-3 rounded-xl text-xs leading-relaxed whitespace-pre-wrap ${
                             isClient
-                              ? "bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-tl-xs border border-slate-200/80 dark:border-slate-700 shadow-2xs"
+                              ? "bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-tl-xs border border-slate-200/90 dark:border-slate-800 shadow-2xs"
                               : isHuman
-                              ? "bg-emerald-600 text-white rounded-tr-xs shadow-xs"
-                              : "bg-indigo-600 text-white rounded-tr-xs shadow-xs"
+                              ? "bg-emerald-700 text-white rounded-tr-xs shadow-2xs"
+                              : "bg-slate-900 text-slate-100 dark:bg-slate-800 dark:text-slate-50 rounded-tr-xs shadow-2xs border border-slate-800 dark:border-slate-700/80"
                           }`}
                         >
-                          {/* Etiqueta del emisor */}
-                          <div className="text-[10px] opacity-75 font-semibold mb-1">
-                            {isClient
-                              ? activeConv.contact?.name || "Cliente"
-                              : isHuman
-                              ? "Persona del Equipo"
-                              : "Sintia (Asistente)"}
+                          {/* Cabecera sutil del emisor */}
+                          <div className="flex items-center justify-between gap-2 mb-1 opacity-70 text-[10px] font-medium">
+                            <span>
+                              {isClient
+                                ? activeConv.contact?.name || "Cliente"
+                                : isHuman
+                                ? "Persona del Equipo"
+                                : "Sintia (Asistente)"}
+                            </span>
+                            <span className="font-mono text-[9px]">
+                              {new Date(msg.createdAt).toLocaleTimeString("es-CO", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                timeZone: "America/Bogota",
+                              })}
+                            </span>
                           </div>
 
-                          {msg.text}
+                          <div className="text-[12px]">{msg.text}</div>
 
-                          {/* Botón de despliegue de herramientas usadas */}
+                          {/* Chips Técnicos de Herramientas Ejecutadas */}
                           {isAssistant && tools.length > 0 && (
-                            <div className="mt-2 pt-2 border-t border-indigo-400/40">
+                            <div className="mt-2.5 pt-2 border-t border-slate-800 dark:border-slate-700">
                               <button
                                 type="button"
                                 onClick={() =>
@@ -388,21 +585,29 @@ export default function ConversacionesPage() {
                                     [msg.id]: !isToolsOpen,
                                   })
                                 }
-                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-100 hover:text-white"
+                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-300 transition"
                               >
+                                <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                                <span>{tools.length} herramienta{tools.length > 1 ? "s" : ""} ejecutada{tools.length > 1 ? "s" : ""}</span>
                                 {isToolsOpen ? (
-                                  <ChevronDown className="w-3 h-3" />
+                                  <ChevronDown className="w-3 h-3 text-slate-400" />
                                 ) : (
-                                  <ChevronRight className="w-3 h-3" />
+                                  <ChevronRight className="w-3 h-3 text-slate-400" />
                                 )}
-                                <span>Herramientas utilizadas ({tools.length})</span>
                               </button>
 
                               {isToolsOpen && (
-                                <div className="mt-1.5 p-2 rounded-lg bg-indigo-950/60 text-[10px] font-mono space-y-1 text-slate-200">
+                                <div className="mt-2 p-2 rounded-lg bg-slate-950 text-[10px] font-mono space-y-1.5 text-slate-300 border border-slate-800">
                                   {tools.map((t: any, idx: number) => (
-                                    <div key={idx}>
-                                      <strong className="text-indigo-300">{t.name}</strong>: {t.result}
+                                    <div key={idx} className="border-b border-slate-800/80 pb-1 last:border-0 last:pb-0">
+                                      <div className="text-emerald-400 font-bold flex items-center gap-1">
+                                        <span>•</span> {t.name}
+                                      </div>
+                                      <div className="text-slate-400 text-[9px] mt-0.5">
+                                        {typeof t.result === "string"
+                                          ? t.result
+                                          : JSON.stringify(t.result)}
+                                      </div>
                                     </div>
                                   ))}
                                 </div>
@@ -410,27 +615,15 @@ export default function ConversacionesPage() {
                             </div>
                           )}
                         </div>
-
-                        <div
-                          className={`text-[10px] text-slate-400 dark:text-slate-500 px-1 ${
-                            isClient ? "text-left" : "text-right"
-                          }`}
-                        >
-                          {new Date(msg.createdAt).toLocaleTimeString("es-CO", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            timeZone: "America/Bogota",
-                          })}
-                        </div>
                       </div>
 
                       {!isClient && (
                         <div
-                          className={`w-7 h-7 rounded-full text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${
-                            isHuman ? "bg-emerald-700" : "bg-indigo-700"
+                          className={`w-6 h-6 rounded-full text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-1 ${
+                            isHuman ? "bg-emerald-800" : "bg-slate-800"
                           }`}
                         >
-                          {isHuman ? <UserCheck className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+                          {isHuman ? <UserCheck className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
                         </div>
                       )}
                     </div>
@@ -439,10 +632,10 @@ export default function ConversacionesPage() {
                 <div ref={chatEndRef} />
               </div>
 
-              {/* Formulario de respuesta para el humano */}
+              {/* Formulario de Envío de Respuesta Humana */}
               <form
                 onSubmit={handleSendHumanReply}
-                className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2"
+                className="p-3 border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2"
               >
                 <input
                   type="text"
@@ -450,27 +643,29 @@ export default function ConversacionesPage() {
                   onChange={(e) => setReplyText(e.target.value)}
                   placeholder={
                     activeConv.status === "human_handoff"
-                      ? "Escribe tu respuesta como persona del equipo..."
-                      : "Toma el control para responder como persona del equipo..."
+                      ? "Escribe tu respuesta como persona del equipo... (Enter para enviar)"
+                      : "Toma el control para responder manualmente al cliente..."
                   }
-                  className="flex-1 px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-600 dark:focus:ring-emerald-400"
+                  className="flex-1 px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-950/60 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-400 transition"
                 />
                 <button
                   type="submit"
                   disabled={sendingReply || !replyText.trim()}
-                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition flex items-center gap-1.5 shadow-xs"
+                  className="px-3.5 py-2 rounded-lg text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 disabled:opacity-40 transition flex items-center gap-1.5 shadow-2xs"
                 >
-                  <Send className="w-3.5 h-3.5" />
+                  <Send className="w-3 h-3" />
                   <span>Enviar</span>
                 </button>
               </form>
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 p-8 text-center space-y-2">
-              <MessageSquare className="w-12 h-12 stroke-1 text-slate-300 dark:text-slate-700" />
-              <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">Selecciona una conversación</div>
-              <p className="text-xs text-slate-400 dark:text-slate-500 max-w-xs">
-                Elige un cliente de la columna izquierda para leer su historial o responderle directamente.
+              <MessageSquare className="w-10 h-10 stroke-1 text-slate-300 dark:text-slate-700" />
+              <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Selecciona una conversación
+              </div>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 max-w-xs">
+                Elige un cliente de la lista para leer su historial o responderle en vivo.
               </p>
             </div>
           )}

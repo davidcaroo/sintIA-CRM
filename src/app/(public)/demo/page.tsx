@@ -511,30 +511,60 @@ export default function LandingDemoPage() {
       </section>
 
       {/* 9. PIE DE PÁGINA */}
-      <footer className="bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 py-10 transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 dark:text-slate-400">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px]">
-              <Sparkles className="w-3.5 h-3.5" />
+      <footer className="bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 py-12 transition-colors">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px]">
+                <Sparkles className="w-3.5 h-3.5" />
+              </div>
+              <span className="font-bold text-slate-800 dark:text-slate-200">Sintia</span>
+              <span>— Asistente de IA para Negocios Locales</span>
             </div>
-            <span className="font-bold text-slate-800 dark:text-slate-200">Sintia</span>
-            <span>— Asistente de IA para Negocios Locales</span>
+
+            <div>
+              Cartagena de Indias, Bolívar, Colombia • Zona Horaria: <strong>America/Bogota</strong> • Español Colombia
+            </div>
+
+            <div className="flex items-center gap-4">
+              <Link href="/" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition font-medium">
+                Panel
+              </Link>
+              <Link href="/login" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition font-medium">
+                Iniciar Sesión
+              </Link>
+              <Link href="/probar" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition font-medium">
+                Simulador
+              </Link>
+            </div>
           </div>
 
-          <div>
-            Cartagena de Indias, Bolívar, Colombia • Zona Horaria: <strong>America/Bogota</strong> • Español Colombia
-          </div>
+          {/* Enlaces Legales y Cumplimiento */}
+          <div className="pt-6 border-t border-slate-100 dark:border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400 dark:text-slate-500">
+            <div>
+              © {new Date().getFullYear()} Sintia. Todos los derechos reservados.
+            </div>
 
-          <div className="flex items-center gap-4">
-            <Link href="/" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition font-medium">
-              Panel
-            </Link>
-            <Link href="/login" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition font-medium">
-              Iniciar Sesión
-            </Link>
-            <Link href="/probar" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition font-medium">
-              Simulador
-            </Link>
+            <div className="flex items-center gap-6 font-medium">
+              <Link
+                href="/privacidad"
+                className="hover:text-indigo-600 dark:hover:text-indigo-400 transition underline-offset-4 hover:underline"
+              >
+                Aviso de privacidad
+              </Link>
+              <Link
+                href="/terminos"
+                className="hover:text-indigo-600 dark:hover:text-indigo-400 transition underline-offset-4 hover:underline"
+              >
+                Condiciones del servicio
+              </Link>
+              <Link
+                href="/eliminacion-datos"
+                className="hover:text-indigo-600 dark:hover:text-indigo-400 transition underline-offset-4 hover:underline"
+              >
+                Eliminación de datos
+              </Link>
+            </div>
           </div>
         </div>
       </footer>
