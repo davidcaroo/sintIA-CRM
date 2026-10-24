@@ -28,7 +28,7 @@ export async function POST(
         ? body.isConnected
         : existing.isConnected || !!body.credentials;
 
-    const updated = await db.integration.update({
+    await db.integration.update({
       where: { id },
       data: {
         config: newConfig,
@@ -39,9 +39,13 @@ export async function POST(
       },
     });
 
-    return NextResponse.json({ success: true, integration: updated });
+    // No se devuelve la integración: incluiría las credenciales cifradas
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error al actualizar config de integración:", error);
     return NextResponse.json({ error: "Error al guardar configuración." }, { status: 500 });
   }
 }
+
+// El panel guarda con PUT
+export const PUT = POST;

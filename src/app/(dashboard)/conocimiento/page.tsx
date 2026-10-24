@@ -122,7 +122,7 @@ export default function ConocimientoPage() {
 
     try {
       if (editingService.id) {
-        await fetch(`/api/knowledge/services/${editingService.id}`, {
+        await fetch("/api/knowledge/services", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(editingService),
@@ -152,7 +152,8 @@ export default function ConocimientoPage() {
     if (!ok) return;
 
     try {
-      await fetch(`/api/knowledge/services/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/knowledge/services?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("No se pudo eliminar");
       toast.success("Servicio eliminado", "La base de datos de servicios ha sido actualizada.");
       loadData();
     } catch (e) {
@@ -168,7 +169,7 @@ export default function ConocimientoPage() {
 
     try {
       if (editingFaq.id) {
-        await fetch(`/api/knowledge/faqs/${editingFaq.id}`, {
+        await fetch("/api/knowledge/faqs", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(editingFaq),
@@ -198,7 +199,8 @@ export default function ConocimientoPage() {
     if (!ok) return;
 
     try {
-      await fetch(`/api/knowledge/faqs/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/knowledge/faqs?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("No se pudo eliminar");
       toast.success("Pregunta eliminada", "Se ha removido de la base de conocimiento.");
       loadData();
     } catch (e) {

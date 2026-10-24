@@ -6,8 +6,14 @@ export async function GET() {
     const [config, channels, integrations, conversations, appointments, activity] =
       await Promise.all([
         db.assistantConfig.findFirst(),
-        db.channelState.findMany(),
-        db.integration.findMany(),
+        // Sin credenciales cifradas: esta respuesta llega al navegador
+        db.channelState.findMany({
+          select: { id: true, isActive: true, status: true, connectedNumber: true, connectedName: true, encryptedCredentials: true },
+        }),
+        db.integration.findMany({
+          select: { id: true, name: true, category: true, isConnected: true, status: true, statusMessage: true },
+          orderBy: { id: "asc" },
+        }),
         db.conversation.findMany({
           include: { contact: true, messages: { take: 1, orderBy: { createdAt: "desc" } } },
           orderBy: { lastMessageAt: "desc" },
@@ -31,7 +37,10 @@ export async function GET() {
 
     return NextResponse.json({
       isActive: config?.isActive ?? true,
-      channels,
+      // WhatsApp solo cuenta como conectado si hay credenciales de Meta (no por estados viejos de Baileys)
+      channels: channels.map(({ encryptedCredentials, ...c }) =>
+        c.id === "whatsapp" && !encryptedCredentials ? { ...c, status: "disconnected", connectedNumber: null } : c
+      ),
       integrations,
       stats: {
         conversationsToday,
