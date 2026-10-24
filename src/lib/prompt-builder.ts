@@ -89,7 +89,7 @@ FECHA Y HORA ACTUAL: ${timeColombia} (Zona horaria: ${timezone} - Cartagena de I
   if (services.length > 0) {
     for (const s of services) {
       const precioStr = s.price !== null
-        ? `${s.isFromPrice ? "desde " : ""}$ ${s.price.toLocaleString("es-CO")} COP`
+        ? `${s.isFromPrice ? "desde " : ""}$ ${Number(s.price).toLocaleString("es-CO")} COP`
         : "Consultar valoración";
       const valStr = s.requiresValuation ? " (Requiere valoración previa)" : "";
       prompt += `- ${s.name}: ${s.description} | Duración: ${s.durationMinutes} min | Tarifa: ${precioStr}${valStr}\n`;

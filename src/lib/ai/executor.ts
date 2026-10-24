@@ -38,7 +38,7 @@ export async function executeTool(
             nombre: m.name,
             descripcion: m.description,
             duracion: `${m.durationMinutes} min`,
-            precio: m.price !== null ? `${m.isFromPrice ? "desde " : ""}$ ${m.price.toLocaleString("es-CO")} COP` : "Valoración previa requerida",
+            precio: m.price !== null ? `${m.isFromPrice ? "desde " : ""}$ ${Number(m.price).toLocaleString("es-CO")} COP` : "Valoración previa requerida",
             requiereValoracionPrevia: m.requiresValuation,
           }));
           summary = `Se encontraron ${matches.length} servicios para "${query}".`;
