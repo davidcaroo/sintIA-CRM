@@ -104,7 +104,9 @@ export async function initWhatsAppWorker() {
       });
 
       if (shouldReconnect) {
-        setTimeout(initWhatsAppWorker, 5000);
+        // En WhatsApp Multi-Device, el código 515 o desconexiones temporales son normales tras el handshake inicial
+        console.log("🔄 [WhatsApp-Worker] Reiniciando socket para sincronización final...");
+        setTimeout(initWhatsAppWorker, 2000);
       } else {
         // Sesión cerrada / logout: limpiar carpeta para permitir nuevo escaneo
         try {
