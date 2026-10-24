@@ -31,7 +31,10 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased font-sans transition-colors duration-200">
+      <body
+        suppressHydrationWarning
+        className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased font-sans transition-colors duration-200"
+      >
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
