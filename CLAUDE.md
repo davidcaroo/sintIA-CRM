@@ -50,6 +50,7 @@ npx tsx tests/events-bus.test.ts
 npx tsx tests/lab-judge.test.ts
 npx tsx tests/whatsapp-cloud.test.ts
 npx tsx tests/web-extract.test.ts
+npx tsx tests/ai-provider.test.ts
 ```
 
 ---
@@ -75,6 +76,7 @@ npx tsx tests/web-extract.test.ts
    - Siempre incluye las cabeceras HTTP:
      - `HTTP-Referer`: `process.env.APP_URL`
      - `X-Title`: `"Sintia"`
+   - Sin `OPENROUTER_API_KEY`, se usa `GEMINI_API_KEY` por el endpoint compatible con OpenAI de Gemini: mismo ciclo de herramientas (function calling).
    - Si una llamada con el modelo elegido falla por indisponibilidad, el sistema **debe reintentar automáticamente una vez con el modelo por defecto** (`DEFAULT_MODEL` = `anthropic/claude-haiku-5.5`).
 2. **Llamada a Herramientas (Function Calling):**
    - Las herramientas disponibles se definen en [`src/lib/ai/tools.ts`](file:///c:/Users/Ingca/OneDrive/Documentos/Asistente de IA%20-%20Antigravity/src/lib/ai/tools.ts) y se ejecutan en [`src/lib/ai/executor.ts`](file:///c:/Users/Ingca/OneDrive/Documentos/Asistente de IA%20-%20Antigravity/src/lib/ai/executor.ts).

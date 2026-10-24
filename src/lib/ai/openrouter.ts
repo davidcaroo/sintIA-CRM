@@ -31,9 +31,10 @@ export async function runAssistantConversation(
 ): Promise<AssistantResponse> {
   const isSafe = options.isSafeMode ?? true;
   const config = await db.assistantConfig.findFirst();
-  const preferredModel = config?.model || process.env.DEFAULT_MODEL || "anthropic/claude-haiku-5.5";
-  const fallbackModel = config?.fallbackModel || process.env.DEFAULT_MODEL || "anthropic/claude-haiku-5.5";
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const provider = resolveProvider(
+    config?.model || process.env.DEFAULT_MODEL || "anthropic/claude-haiku-5.5",
+    config?.fallbackModel || process.env.DEFAULT_MODEL || "anthropic/claude-haiku-5.5"
+  );
 
   // 1. Construir prompt del sistema y herramientas
   const systemPrompt = await buildSystemPrompt({
@@ -46,28 +47,12 @@ export async function runAssistantConversation(
   const timeline: ToolExecutionResult[] = [];
   const toolsUsedForMessage: any[] = [];
 
-  // 2. Si no hay clave de OpenRouter, probar si hay GEMINI_API_KEY directa
-  if (!apiKey || apiKey.trim() === "") {
-    if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== "") {
-      try {
-        const geminiModel = preferredModel.includes("gemini")
-          ? preferredModel.replace("google/", "")
-          : "gemini-2.5-flash";
-        const geminiReply = await callGeminiApi(systemPrompt, userMessage, history, geminiModel);
-        return {
-          reply: geminiReply,
-          timeline: [],
-          toolsUsed: [],
-          modelUsed: `google/${geminiModel}`,
-        };
-      } catch (err: any) {
-        console.warn(`⚠️ [Gemini Direct] ${err.message}. Empleando motor inteligente local.`);
-      }
-    }
+  // 2. Sin ninguna clave de IA: motor local de demostración
+  if (!provider) {
     return simulateLocalAssistantResponse(userMessage, systemPrompt, isSafe, options);
   }
 
-  // 3. Preparar historial para OpenRouter (últimos 20 mensajes)
+  // 3. Historial (últimos 20 mensajes). Lo que escribe el equipo ("human") habla por el negocio, no por el cliente
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
   ];
@@ -75,14 +60,15 @@ export async function runAssistantConversation(
   const recentHistory = history.slice(-20);
   for (const h of recentHistory) {
     messages.push({
-      role: h.sender === "assistant" ? "assistant" : "user",
+      role: h.sender === "client" || h.sender === "user" ? "user" : "assistant",
       content: h.text,
     });
   }
 
   messages.push({ role: "user", content: userMessage });
 
-  let activeModel = preferredModel;
+  let activeModel = provider.model;
+  const fallbackModel = provider.fallback;
   let attempts = 0;
   const MAX_TOOL_CALLS = 5;
 
@@ -91,9 +77,9 @@ export async function runAssistantConversation(
     let responseData: any = null;
 
     try {
-      responseData = await callOpenRouter(messages, availableTools, activeModel);
+      responseData = await callChat(provider, messages, availableTools, activeModel);
     } catch (err: any) {
-      console.warn(`⚠️ Error en OpenRouter con modelo ${activeModel}: ${err.message}`);
+      console.warn(`⚠️ Error en ${provider.name} con modelo ${activeModel}: ${err.message}`);
 
       // Si falla y estábamos usando un modelo distinto del fallback, registrar en Actividad y reintentar con el default
       if (activeModel !== fallbackModel) {
@@ -112,9 +98,14 @@ export async function runAssistantConversation(
         }
 
         activeModel = fallbackModel;
-        responseData = await callOpenRouter(messages, availableTools, fallbackModel);
+        try {
+          responseData = await callChat(provider, messages, availableTools, fallbackModel);
+        } catch (err2: any) {
+          console.warn(`⚠️ ${provider.name} tampoco respondió con ${fallbackModel}: ${err2.message}. Empleando motor local.`);
+          return simulateLocalAssistantResponse(userMessage, systemPrompt, isSafe, options);
+        }
       } else {
-        // Fallback a motor local si OpenRouter está inaccesible
+        // Fallback a motor local si el proveedor está inaccesible
         return simulateLocalAssistantResponse(userMessage, systemPrompt, isSafe, options);
       }
     }
@@ -174,7 +165,7 @@ export async function runAssistantConversation(
       reply: message.content || "Disculpa, ¿podrías repetirme tu consulta?",
       timeline,
       toolsUsed: toolsUsedForMessage,
-      modelUsed: activeModel,
+      modelUsed: provider.label(activeModel),
     };
   }
 
@@ -183,73 +174,63 @@ export async function runAssistantConversation(
     reply: "He recopilado los datos y gestionado tu solicitud con el equipo.",
     timeline,
     toolsUsed: toolsUsedForMessage,
-    modelUsed: activeModel,
+    modelUsed: provider.label(activeModel),
   };
 }
 
-async function callGeminiApi(
-  systemPrompt: string,
-  userMessage: string,
-  history: { sender: string; text: string }[],
-  model = "gemini-2.5-flash"
-): Promise<string> {
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey) throw new Error("No GEMINI_API_KEY configurada.");
-
-  const contents: any[] = [];
-  const recentHistory = history.slice(-10);
-  for (const h of recentHistory) {
-    contents.push({
-      role: h.sender === "assistant" ? "model" : "user",
-      parts: [{ text: h.text }],
-    });
-  }
-  contents.push({
-    role: "user",
-    parts: [{ text: userMessage }],
-  });
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: systemPrompt }],
-        },
-        contents,
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 600,
-        },
-      }),
-      signal: AbortSignal.timeout(15000),
-    }
-  );
-
-  if (!res.ok) {
-    const errorBody = await res.text();
-    throw new Error(`Gemini HTTP ${res.status}: ${errorBody.slice(0, 180)}`);
-  }
-
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Respuesta vacía recibida de Gemini.");
-  return text;
+interface ChatProvider {
+  name: "OpenRouter" | "Gemini";
+  url: string;
+  key: string;
+  model: string;
+  fallback: string;
+  headers: Record<string, string>;
+  /** Nombre del modelo tal como se muestra en el panel. */
+  label: (model: string) => string;
 }
 
-async function callOpenRouter(messages: ChatMessage[], tools: any[], model: string) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  const appUrl = process.env.APP_URL || "http://localhost:3000";
+/**
+ * OpenRouter si hay clave; si no, Gemini por su endpoint compatible con OpenAI,
+ * que admite herramientas (function calling) igual que OpenRouter.
+ */
+export function resolveProvider(preferred: string, fallback: string): ChatProvider | null {
+  const orKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (orKey) {
+    return {
+      name: "OpenRouter",
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      key: orKey,
+      model: preferred,
+      fallback,
+      headers: { "HTTP-Referer": process.env.APP_URL || "http://localhost:3000", "X-Title": "Sintia" },
+      label: (m) => m,
+    };
+  }
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
+  if (geminiKey) {
+    // "google/gemini-2.5-flash" → "gemini-2.5-flash"; un modelo de otro proveedor no existe en Gemini
+    const toGemini = (m: string) => (m.includes("gemini") ? m.replace(/^google\//, "") : "gemini-2.5-flash");
+    const base = (process.env.GEMINI_OPENAI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai").replace(/\/$/, "");
+    return {
+      name: "Gemini",
+      url: `${base}/chat/completions`,
+      key: geminiKey,
+      model: toGemini(preferred),
+      fallback: toGemini(fallback) === toGemini(preferred) ? "gemini-2.5-flash" : toGemini(fallback),
+      headers: {},
+      label: (m) => `google/${m}`,
+    };
+  }
+  return null;
+}
 
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+async function callChat(provider: ChatProvider, messages: ChatMessage[], tools: any[], model: string) {
+  const res = await fetch(provider.url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": appUrl,
-      "X-Title": "Sintia",
+      Authorization: `Bearer ${provider.key}`,
+      ...provider.headers,
     },
     body: JSON.stringify({
       model,
@@ -257,12 +238,12 @@ async function callOpenRouter(messages: ChatMessage[], tools: any[], model: stri
       tools: tools.length > 0 ? tools : undefined,
       tool_choice: tools.length > 0 ? "auto" : undefined,
     }),
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!res.ok) {
     const errorBody = await res.text();
-    throw new Error(`OpenRouter HTTP ${res.status}: ${errorBody.slice(0, 200)}`);
+    throw new Error(`${provider.name} HTTP ${res.status}: ${errorBody.slice(0, 200)}`);
   }
 
   return res.json();
